@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>离线体素沙盒</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none;}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:system-ui,Roboto,"Segoe UI",sans-serif;color:#fff;}
+#game{width:100%;height:100%;touch-action:none;display:block;background:#222;}
+#crosshair{position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;pointer-events:none;}
+#crosshair:before,#crosshair:after{content:"";position:absolute;background:rgba(255,255,255,0.8);} 
+#crosshair:before{left:7px;top:0;width:2px;height:16px;} 
+#crosshair:after{left:0;top:7px;width:16px;height:2px;} 
+#hotbar{position:absolute;left:50%;bottom:2vh;transform:translateX(-50%);display:flex;gap:0.5vh;background:rgba(0,0,0,0.35);padding:1vh;border-radius:1vh;backdrop-filter:blur(6px);} 
+.hotbar-slot{width:7vh;height:7vh;border:2px solid rgba(255,255,255,0.3);border-radius:0.8vh;display:flex;align-items:center;justify-content:center;position:relative;background:rgba(0,0,0,0.3);} 
+.hotbar-slot.selected{border-color:#ffe27a;box-shadow:0 0 12px rgba(255,226,122,0.8);} 
+.slot-count{position:absolute;bottom:0.3vh;right:0.5vh;font-size:1.6vh;text-shadow:0 0 4px #000;} 
+.slot-icon{width:60%;height:60%;border-radius:0.4vh;background:#888;} 
+#inventory-layer{position:absolute;left:0;top:0;width:100%;height:100%;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.65);backdrop-filter:blur(8px);} 
+#inventory-panel{width:min(96vw,720px);max-width:96vw;background:rgba(18,18,18,0.95);border-radius:18px;padding:20px;box-shadow:0 0 40px rgba(0,0,0,0.5);} 
+.inventory-grid{display:grid;gap:8px;justify-content:center;} 
+.inventory-grid.inventory{grid-template-columns:repeat(9,1fr);} 
+.inventory-grid.crafting-2{grid-template-columns:repeat(2,1fr);} 
+.inventory-grid.crafting-3{grid-template-columns:repeat(3,1fr);} 
+.inventory-slot{width:64px;height:64px;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:12px;display:flex;align-items:center;justify-content:center;position:relative;} 
+.inventory-slot .slot-icon{width:48px;height:48px;border-radius:10px;} 
+.inventory-slot .slot-count{font-size:16px;} 
+#crafting-wrapper{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:16px;margin-top:16px;} 
+#result-slot{width:72px;height:72px;border:3px solid rgba(255,255,255,0.35);border-radius:14px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.07);position:relative;} 
+#result-slot.ready{border-color:#66ff9c;box-shadow:0 0 16px rgba(102,255,156,0.6);} 
+#result-slot .slot-icon{width:56px;height:56px;border-radius:12px;} 
+#touch-controls{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:auto;display:none;touch-action:none;}
+.joystick{position:absolute;width:30vw;max-width:220px;height:30vw;max-height:220px;border-radius:50%;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.2);pointer-events:auto;display:flex;align-items:center;justify-content:center;} 
+.joystick[data-side="left"]{left:5vw;bottom:14vh;} 
+.joystick[data-side="right"]{right:5vw;bottom:14vh;} 
+.joystick-inner{width:40%;height:40%;border-radius:50%;background:rgba(255,255,255,0.35);} 
+.touch-btn{position:absolute;width:14vw;max-width:120px;height:14vw;max-height:120px;border-radius:50%;background:rgba(255,255,255,0.12);border:2px solid rgba(255,255,255,0.25);pointer-events:auto;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;} 
+#jump-btn{right:8vw;bottom:38vh;} 
+#inventory-btn{right:8vw;bottom:8vh;} 
+#hint{position:absolute;left:50%;top:6vh;transform:translateX(-50%);font-size:2vh;padding:1vh 2vh;background:rgba(0,0,0,0.45);border-radius:1vh;} 
+#debug{position:absolute;left:1vh;top:1vh;font-size:1.6vh;background:rgba(0,0,0,0.35);padding:0.7vh 1vh;border-radius:1vh;} 
+.tooltip{position:absolute;padding:4px 8px;background:rgba(0,0,0,0.8);border-radius:6px;font-size:14px;pointer-events:none;opacity:0;transition:opacity 0.15s;} 
+#save-indicator{position:absolute;right:2vh;top:2vh;font-size:1.6vh;padding:0.7vh 1.4vh;background:rgba(0,0,0,0.5);border-radius:1vh;opacity:0;transition:opacity 0.3s;}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="crosshair"></div>
+<div id="hotbar"></div>
+<div id="touch-controls">
+  <div class="joystick" data-side="left"><div class="joystick-inner"></div></div>
+  <div class="joystick" data-side="right"><div class="joystick-inner"></div></div>
+  <div class="touch-btn" id="jump-btn">跳</div>
+  <div class="touch-btn" id="inventory-btn">包</div>
+</div>
+<div id="hint">点击画面进入，WASD移动，鼠标左键挖掘，右键放置，E打开背包</div>
+<div id="debug"></div>
+<div id="save-indicator">已保存</div>
+<div id="inventory-layer">
+  <div id="inventory-panel">
+    <h2 style="text-align:center;margin-bottom:12px;">背包 &amp; 合成</h2>
+    <div class="inventory-grid inventory" id="inventory-grid"></div>
+    <div id="crafting-wrapper">
+      <div>
+        <div id="crafting-title" style="text-align:center;margin-bottom:6px;font-size:18px;">2×2 合成</div>
+        <div class="inventory-grid" id="crafting-grid"></div>
+      </div>
+      <div style="font-size:42px;">➡</div>
+      <div id="result-slot"></div>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const gl = canvas.getContext('webgl', {antialias: true});
+  if (!gl) {
+    alert('WebGL 初始化失败。');
+    return;
+  }
+  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const hotbarEl = document.getElementById('hotbar');
+  const inventoryLayer = document.getElementById('inventory-layer');
+  const inventoryGridEl = document.getElementById('inventory-grid');
+  const craftingGridEl = document.getElementById('crafting-grid');
+  const craftingTitleEl = document.getElementById('crafting-title');
+  const resultSlotEl = document.getElementById('result-slot');
+  const touchControlsEl = document.getElementById('touch-controls');
+  const hintEl = document.getElementById('hint');
+  const debugEl = document.getElementById('debug');
+  const saveIndicatorEl = document.getElementById('save-indicator');
+  if (isMobile) {
+    touchControlsEl.style.display = 'block';
+    hintEl.textContent = '拖动左摇杆移动，右摇杆观察，长按中央挖掘，轻点放置';
+  }
+
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = Math.floor(canvas.clientWidth * dpr);
+    const height = Math.floor(canvas.clientHeight * dpr);
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+  const observer = new ResizeObserver(resizeCanvas);
+  observer.observe(canvas);
+  resizeCanvas();
+
+  const MAX_TORCH_UNIFORMS = 16;
+  const VERTEX_SRC = `
+  attribute vec3 aPosition;
+  attribute vec3 aNormal;
+  attribute vec3 aColor;
+  uniform mat4 uProjection;
+  uniform mat4 uView;
+  uniform vec3 uSunDir;
+  uniform float uAmbient;
+  uniform vec3 uTorchPositions[${MAX_TORCH_UNIFORMS}];
+  uniform float uTorchCount;
+  varying vec3 vColor;
+  void main(){
+    vec3 worldPos = aPosition;
+    float diffuse = max(dot(normalize(aNormal), uSunDir), 0.0);
+    float light = uAmbient + diffuse * 0.7;
+    for(int i=0;i<${MAX_TORCH_UNIFORMS};i++){
+      if(float(i) >= uTorchCount) break;
+      float dist = distance(worldPos, uTorchPositions[i]);
+      light += max(0.0, (1.0 - dist / 6.0)) * 0.85;
+    }
+    vColor = aColor * clamp(light, 0.05, 2.5);
+    gl_Position = uProjection * uView * vec4(worldPos, 1.0);
+  }
+  `;
+  const FRAGMENT_SRC = `
+  precision mediump float;
+  varying vec3 vColor;
+  void main(){
+    gl_FragColor = vec4(clamp(vColor, 0.0, 1.0), 1.0);
+  }
+  `;
+
+  function createShader(type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(shader));
+      throw new Error('Shader compile error');
+    }
+    return shader;
+  }
+  const vertexShader = createShader(gl.VERTEX_SHADER, VERTEX_SRC);
+  const fragmentShader = createShader(gl.FRAGMENT_SHADER, FRAGMENT_SRC);
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    throw new Error('Program link error: ' + gl.getProgramInfoLog(program));
+  }
+  gl.useProgram(program);
+  const attribPosition = gl.getAttribLocation(program, 'aPosition');
+  const attribNormal = gl.getAttribLocation(program, 'aNormal');
+  const attribColor = gl.getAttribLocation(program, 'aColor');
+  const uniformProjection = gl.getUniformLocation(program, 'uProjection');
+  const uniformView = gl.getUniformLocation(program, 'uView');
+  const uniformSunDir = gl.getUniformLocation(program, 'uSunDir');
+  const uniformAmbient = gl.getUniformLocation(program, 'uAmbient');
+  const uniformTorchPositions = new Array(MAX_TORCH_UNIFORMS).fill(0).map((_,i)=>gl.getUniformLocation(program, `uTorchPositions[${i}]`));
+  const uniformTorchCount = gl.getUniformLocation(program, 'uTorchCount');
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+
+  function mat4Perspective(out, fovy, aspect, near, far) {
+    const f = 1.0 / Math.tan(fovy / 2);
+    out[0] = f / aspect; out[1]=0; out[2]=0; out[3]=0;
+    out[4]=0; out[5]=f; out[6]=0; out[7]=0;
+    out[8]=0; out[9]=0; out[10]=(far+near)/(near-far); out[11]=-1;
+    out[12]=0; out[13]=0; out[14]=(2*far*near)/(near-far); out[15]=0;
+    return out;
+  }
+  function mat4Look(out, eye, target, up) {
+    const zx = eye[0]-target[0];
+    const zy = eye[1]-target[1];
+    const zz = eye[2]-target[2];
+    let rl = Math.sqrt(zx*zx+zy*zy+zz*zz);
+    const zxN = zx/rl, zyN = zy/rl, zzN = zz/rl;
+    const xx = up[1]*zzN - up[2]*zyN;
+    const xy = up[2]*zxN - up[0]*zzN;
+    const xz = up[0]*zyN - up[1]*zxN;
+    rl = Math.sqrt(xx*xx + xy*xy + xz*xz);
+    const xxN = xx/rl, xyN = xy/rl, xzN = xz/rl;
+    const yx = zyN*xzN - zzN*xyN;
+    const yy = zzN*xxN - zxN*xzN;
+    const yz = zxN*xyN - zyN*xxN;
+    out[0]=xxN; out[1]=yx; out[2]=zxN; out[3]=0;
+    out[4]=xyN; out[5]=yy; out[6]=zyN; out[7]=0;
+    out[8]=xzN; out[9]=yz; out[10]=zzN; out[11]=0;
+    out[12]=-(xxN*eye[0]+xyN*eye[1]+xzN*eye[2]);
+    out[13]=-(yx*eye[0]+yy*eye[1]+yz*eye[2]);
+    out[14]=-(zxN*eye[0]+zyN*eye[1]+zzN*eye[2]);
+    out[15]=1;
+    return out;
+  }
+
+  const FACE_DEFS = [
+    {dir:[0,0,-1], corners:[0,0,0, 1,0,0, 1,1,0, 0,1,0]},
+    {dir:[0,0,1], corners:[1,0,1, 0,0,1, 0,1,1, 1,1,1]},
+    {dir:[-1,0,0], corners:[0,0,1, 0,0,0, 0,1,0, 0,1,1]},
+    {dir:[1,0,0], corners:[1,0,0, 1,0,1, 1,1,1, 1,1,0]},
+    {dir:[0,1,0], corners:[0,1,1, 1,1,1, 1,1,0, 0,1,0]},
+    {dir:[0,-1,0], corners:[0,0,0, 1,0,0, 1,0,1, 0,0,1]},
+  ];
+  const TRI_INDICES = [0,1,2, 0,2,3];
+
+  const BLOCK = {
+    AIR:0,
+    GRASS:1,
+    DIRT:2,
+    STONE:3,
+    PLANKS:4,
+    TABLE:5,
+    TORCH:6,
+    LOG:7,
+    LEAVES:8,
+    COAL_ORE:9
+  };
+
+  const ITEM = {
+    AIR:0,
+    GRASS_BLOCK:1,
+    DIRT:2,
+    STONE:3,
+    PLANKS:4,
+    TABLE:5,
+    TORCH:6,
+    LOG:7,
+    LEAVES:8,
+    COAL_ORE:9,
+    COAL:10,
+    STICK:11
+  };
+
+  const blockDefs = [];
+  blockDefs[BLOCK.AIR] = {id:BLOCK.AIR, name:'空气', solid:false, selectable:false, colors:[null], hardness:0};
+  blockDefs[BLOCK.GRASS] = {id:BLOCK.GRASS, name:'草方块', solid:true, selectable:true, colors:[
+    [0.35,0.55,0.22],
+    [0.35,0.55,0.22],
+    [0.35,0.3,0.15],
+    [0.35,0.3,0.15],
+    [0.32,0.68,0.22],
+    [0.35,0.25,0.1]
+  ], hardness:1.2, drops:ITEM.DIRT};
+  blockDefs[BLOCK.DIRT] = {id:BLOCK.DIRT, name:'泥土', solid:true, selectable:true, colors:Array(6).fill([0.45,0.3,0.16]), hardness:1.0, drops:ITEM.DIRT};
+  blockDefs[BLOCK.STONE] = {id:BLOCK.STONE, name:'石头', solid:true, selectable:true, colors:Array(6).fill([0.55,0.55,0.6]), hardness:2.5, drops:ITEM.STONE};
+  blockDefs[BLOCK.PLANKS] = {id:BLOCK.PLANKS, name:'木板', solid:true, selectable:true, colors:Array(6).fill([0.65,0.5,0.25]), hardness:1.6, drops:ITEM.PLANKS};
+  blockDefs[BLOCK.TABLE] = {id:BLOCK.TABLE, name:'工作台', solid:true, selectable:true, colors:[
+    [0.5,0.3,0.2],[0.5,0.3,0.2],[0.58,0.36,0.2],[0.58,0.36,0.2],[0.8,0.6,0.3],[0.38,0.22,0.12]
+  ], hardness:2.0, drops:ITEM.TABLE};
+  blockDefs[BLOCK.TORCH] = {id:BLOCK.TORCH, name:'火把', solid:false, selectable:true, colors:Array(6).fill([0.95,0.75,0.2]), hardness:0.2, drops:ITEM.TORCH};
+  blockDefs[BLOCK.LOG] = {id:BLOCK.LOG, name:'原木', solid:true, selectable:true, colors:[
+    [0.4,0.26,0.12],[0.4,0.26,0.12],[0.4,0.26,0.12],[0.4,0.26,0.12],[0.55,0.42,0.27],[0.55,0.42,0.27]
+  ], hardness:2.2, drops:ITEM.LOG};
+  blockDefs[BLOCK.LEAVES] = {id:BLOCK.LEAVES, name:'树叶', solid:false, selectable:true, colors:Array(6).fill([0.22,0.45,0.18]), hardness:0.4, drops:ITEM.LEAVES};
+  blockDefs[BLOCK.COAL_ORE] = {id:BLOCK.COAL_ORE, name:'煤矿石', solid:true, selectable:true, colors:Array(6).fill([0.25,0.25,0.25]), hardness:2.6, drops:ITEM.COAL};
+
+  const itemDefs = [];
+  function defItem(id, options) { itemDefs[id] = Object.assign({id, placeable:false, blockId:null, name:'物品', icon:[0.7,0.7,0.7]}, options); }
+  defItem(ITEM.AIR, {name:'', icon:[0,0,0], placeable:false});
+  defItem(ITEM.GRASS_BLOCK, {name:'草方块', placeable:true, blockId:BLOCK.GRASS, icon:[0.35,0.6,0.25]});
+  defItem(ITEM.DIRT, {name:'泥土', placeable:true, blockId:BLOCK.DIRT, icon:[0.45,0.3,0.16]});
+  defItem(ITEM.STONE, {name:'石头', placeable:true, blockId:BLOCK.STONE, icon:[0.55,0.55,0.6]});
+  defItem(ITEM.PLANKS, {name:'木板', placeable:true, blockId:BLOCK.PLANKS, icon:[0.65,0.5,0.25]});
+  defItem(ITEM.TABLE, {name:'工作台', placeable:true, blockId:BLOCK.TABLE, icon:[0.7,0.45,0.2]});
+  defItem(ITEM.TORCH, {name:'火把', placeable:true, blockId:BLOCK.TORCH, icon:[0.95,0.75,0.2]});
+  defItem(ITEM.LOG, {name:'原木', placeable:true, blockId:BLOCK.LOG, icon:[0.5,0.35,0.2]});
+  defItem(ITEM.LEAVES, {name:'树叶', placeable:true, blockId:BLOCK.LEAVES, icon:[0.2,0.45,0.16]});
+  defItem(ITEM.COAL_ORE, {name:'煤矿石', placeable:true, blockId:BLOCK.COAL_ORE, icon:[0.25,0.25,0.25]});
+  defItem(ITEM.COAL, {name:'煤炭', placeable:false, icon:[0.1,0.1,0.1]});
+  defItem(ITEM.STICK, {name:'木棍', placeable:false, icon:[0.6,0.45,0.2]});
+
+  const WORLD = {
+    chunkSize:16,
+    chunkHeight:96,
+    chunks:new Map(),
+    seed:Math.floor(Math.random()*1e9)
+  };
+
+  const STORAGE_KEY = 'voxel-sandbox-save-v1';
+  let savedData = null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) savedData = JSON.parse(raw);
+  } catch(e) {
+    console.warn('读取存档失败', e);
+  }
+  if (savedData && typeof savedData.seed === 'number') {
+    WORLD.seed = savedData.seed;
+  }
+
+  function rngSeeded(x, y) {
+    const seed = x * 374761393 + y * 668265263 + WORLD.seed * 69069;
+    let n = seed ^ (seed >> 13);
+    n = (n * (n * n * 15731 + 789221) + 1376312589);
+    n = (n >> 14) & 0x7fffffff;
+    return n / 0x7fffffff;
+  }
+
+  function smoothNoise(x, z) {
+    const xi = Math.floor(x);
+    const zi = Math.floor(z);
+    let xf = x - xi;
+    let zf = z - zi;
+    function lerp(a,b,t){return a + (b-a)*t;}
+    function fade(t){return t*t*(3-2*t);}
+    const v00 = rngSeeded(xi, zi);
+    const v10 = rngSeeded(xi+1, zi);
+    const v01 = rngSeeded(xi, zi+1);
+    const v11 = rngSeeded(xi+1, zi+1);
+    const tx = fade(xf);
+    const tz = fade(zf);
+    return lerp(lerp(v00, v10, tx), lerp(v01, v11, tx), tz);
+  }
+
+  function octaveNoise(x,z,octaves=4) {
+    let value = 0;
+    let amp = 1;
+    let freq = 0.02;
+    let max = 0;
+    for (let i=0;i<octaves;i++) {
+      value += smoothNoise(x*freq, z*freq) * amp;
+      max += amp;
+      amp *= 0.5;
+      freq *= 2;
+    }
+    return value / max;
+  }
+
+  function getHeight(x,z) {
+    const base = octaveNoise(x, z, 5);
+    return Math.floor(40 + base * 24);
+  }
+
+  const modifiedBlocks = new Map();
+  if (savedData && savedData.modifications) {
+    for (const key in savedData.modifications) {
+      modifiedBlocks.set(key, savedData.modifications[key]);
+    }
+  }
+
+  function chunkKey(cx, cz) { return cx + ',' + cz; }
+  function blockKey(x,y,z) { return x + ',' + y + ',' + z; }
+
+  class Chunk {
+    constructor(cx, cz) {
+      this.cx = cx;
+      this.cz = cz;
+      this.blocks = new Uint8Array(WORLD.chunkSize * WORLD.chunkHeight * WORLD.chunkSize);
+      this.dirty = true;
+      this.generated = false;
+      this.vbo = null;
+      this.vertexCount = 0;
+    }
+    index(x,y,z) {
+      return x + WORLD.chunkSize * (z + WORLD.chunkSize * y);
+    }
+    get(x,y,z) {
+      if (y < 0 || y >= WORLD.chunkHeight) return BLOCK.AIR;
+      return this.blocks[this.index(x,y,z)];
+    }
+    set(x,y,z,id) {
+      if (y < 0 || y >= WORLD.chunkHeight) return;
+      this.blocks[this.index(x,y,z)] = id;
+      this.dirty = true;
+    }
+  }
+
+  function ensureChunk(cx, cz) {
+    const key = chunkKey(cx, cz);
+    let chunk = WORLD.chunks.get(key);
+    if (!chunk) {
+      chunk = new Chunk(cx, cz);
+      WORLD.chunks.set(key, chunk);
+    }
+    if (!chunk.generated) generateChunk(chunk);
+    return chunk;
+  }
+
+  function applyModification(chunk) {
+    const baseX = chunk.cx * WORLD.chunkSize;
+    const baseZ = chunk.cz * WORLD.chunkSize;
+    for (let y=0;y<WORLD.chunkHeight;y++) {
+      for (let x=0;x<WORLD.chunkSize;x++) {
+        for (let z=0;z<WORLD.chunkSize;z++) {
+          const key = blockKey(baseX+x, y, baseZ+z);
+          if (modifiedBlocks.has(key)) {
+            chunk.blocks[chunk.index(x,y,z)] = modifiedBlocks.get(key);
+          }
+        }
+      }
+    }
+  }
+
+  function generateTree(chunk, localX, groundY, localZ, chance) {
+    if (chance < 0.9) return;
+    const height = 4 + Math.floor(chance * 3);
+    for (let y=0;y<height;y++) {
+      if (groundY + y >= WORLD.chunkHeight) break;
+      chunk.set(localX, groundY + y, localZ, BLOCK.LOG);
+    }
+    const leafRadius = 2;
+    const top = Math.min(groundY + height, WORLD.chunkHeight - 1);
+    for (let y=top - 2; y<=top; y++) {
+      for (let dx=-leafRadius; dx<=leafRadius; dx++) {
+        for (let dz=-leafRadius; dz<=leafRadius; dz++) {
+          const lx = localX + dx;
+          const lz = localZ + dz;
+          if (lx<0 || lx>=WORLD.chunkSize || lz<0 || lz>=WORLD.chunkSize) continue;
+          const dist = Math.abs(dx) + Math.abs(dz);
+          if (dist <= leafRadius) {
+            if (chunk.get(lx, y, lz) === BLOCK.AIR) {
+              chunk.set(lx, y, lz, BLOCK.LEAVES);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function generateChunk(chunk) {
+    const baseX = chunk.cx * WORLD.chunkSize;
+    const baseZ = chunk.cz * WORLD.chunkSize;
+    for (let x=0;x<WORLD.chunkSize;x++) {
+      for (let z=0;z<WORLD.chunkSize;z++) {
+        const worldX = baseX + x;
+        const worldZ = baseZ + z;
+        const height = getHeight(worldX, worldZ);
+        for (let y=0;y<WORLD.chunkHeight;y++) {
+          let block = BLOCK.AIR;
+          if (y <= 1) block = BLOCK.STONE;
+          if (y < height - 5) block = BLOCK.STONE;
+          else if (y < height - 1) block = BLOCK.DIRT;
+          else if (y === height - 1) block = BLOCK.GRASS;
+          if (block === BLOCK.STONE && y < height - 4) {
+            const r = rngSeeded(worldX*2, worldZ*2 + y*3);
+            if (r > 0.82) block = BLOCK.COAL_ORE;
+          }
+          chunk.blocks[chunk.index(x,y,z)] = block;
+        }
+        const surface = height - 1;
+        if (surface > 5 && surface + 6 < WORLD.chunkHeight) {
+          const treeChance = rngSeeded(worldX, worldZ);
+          if (chunk.get(x, surface, z) === BLOCK.GRASS) {
+            generateTree(chunk, x, surface + 1, z, treeChance);
+          }
+        }
+      }
+    }
+    chunk.generated = true;
+    applyModification(chunk);
+    chunk.dirty = true;
+  }
+
+  function getBlock(x,y,z) {
+    if (y < 0 || y >= WORLD.chunkHeight) return BLOCK.AIR;
+    const cx = Math.floor(x / WORLD.chunkSize);
+    const cz = Math.floor(z / WORLD.chunkSize);
+    const lx = ((x % WORLD.chunkSize) + WORLD.chunkSize) % WORLD.chunkSize;
+    const lz = ((z % WORLD.chunkSize) + WORLD.chunkSize) % WORLD.chunkSize;
+    const chunk = ensureChunk(cx, cz);
+    return chunk.get(lx, y, lz);
+  }
+
+  function setBlock(x,y,z,id, save=true) {
+    if (y < 0 || y >= WORLD.chunkHeight) return false;
+    const cx = Math.floor(x / WORLD.chunkSize);
+    const cz = Math.floor(z / WORLD.chunkSize);
+    const lx = ((x % WORLD.chunkSize) + WORLD.chunkSize) % WORLD.chunkSize;
+    const lz = ((z % WORLD.chunkSize) + WORLD.chunkSize) % WORLD.chunkSize;
+    const chunk = ensureChunk(cx, cz);
+    const old = chunk.get(lx,y,lz);
+    if (old === id) return false;
+    chunk.set(lx,y,lz,id);
+    const key = blockKey(x,y,z);
+    if (save) {
+      modifiedBlocks.set(key, id);
+      scheduleSave();
+    }
+    if (old === BLOCK.TORCH) removeTorch(x+0.5,y+0.6,z+0.5);
+    if (id === BLOCK.TORCH) addTorch(x+0.5,y+0.6,z+0.5);
+    return true;
+  }
+
+  function rebuildChunkMesh(chunk) {
+    const baseX = chunk.cx * WORLD.chunkSize;
+    const baseZ = chunk.cz * WORLD.chunkSize;
+    const positions = [];
+    const normals = [];
+    const colors = [];
+    const pushFace = (x,y,z, faceIndex, color) => {
+      const face = FACE_DEFS[faceIndex];
+      for (let i=0;i<TRI_INDICES.length;i++) {
+        const idx = TRI_INDICES[i];
+        const vx = face.corners[idx*3];
+        const vy = face.corners[idx*3+1];
+        const vz = face.corners[idx*3+2];
+        positions.push(baseX + x + vx, y + vy, baseZ + z + vz);
+        const dir = face.dir;
+        normals.push(dir[0], dir[1], dir[2]);
+        colors.push(color[0], color[1], color[2]);
+      }
+    };
+
+    const pushTorch = (x,y,z,color) => {
+      const cx = baseX + x + 0.5;
+      const cy = y + 0.4;
+      const cz = baseZ + z + 0.5;
+      const size = 0.15;
+      const height = 0.7;
+      const quads = [
+        [[-size,0,0],[size,0,0],[size,height,0],[-size,height,0], [0,0,1]],
+        [[0,0,-size],[0,0,size],[0,height,size],[0,height,-size], [1,0,0]]
+      ];
+      quads.forEach(q => {
+        const dir = q[4];
+        const quad = q.slice(0,4);
+        const tri = [0,1,2,0,2,3];
+        for (let i=0;i<tri.length;i++) {
+          const v = quad[tri[i]];
+          positions.push(cx + v[0], cy + v[1], cz + v[2]);
+          normals.push(dir[0], dir[1], dir[2]);
+          colors.push(color[0], color[1], color[2]);
+        }
+      });
+    };
+
+    for (let y=0;y<WORLD.chunkHeight;y++) {
+      for (let x=0;x<WORLD.chunkSize;x++) {
+        for (let z=0;z<WORLD.chunkSize;z++) {
+          const id = chunk.get(x,y,z);
+          if (!id) continue;
+          if (id === BLOCK.TORCH) {
+            pushTorch(x,y,z,[0.95,0.85,0.4]);
+            continue;
+          }
+          const def = blockDefs[id];
+          if (!def) continue;
+          for (let f=0;f<6;f++) {
+            const face = FACE_DEFS[f];
+            const nx = baseX + x + face.dir[0];
+            const ny = y + face.dir[1];
+            const nz = baseZ + z + face.dir[2];
+            const neighbor = getBlock(nx, ny, nz);
+            const neighborDef = blockDefs[neighbor];
+            const solid = neighborDef && neighborDef.solid;
+            if (!solid) {
+              const color = def.colors[f] || def.colors[0];
+              pushFace(x,y,z,f,color);
+            }
+          }
+        }
+      }
+    }
+
+    const data = new Float32Array(positions.length + normals.length + colors.length);
+    for (let i=0;i<positions.length/3;i++) {
+      data[i*9] = positions[i*3];
+      data[i*9+1] = positions[i*3+1];
+      data[i*9+2] = positions[i*3+2];
+      data[i*9+3] = normals[i*3];
+      data[i*9+4] = normals[i*3+1];
+      data[i*9+5] = normals[i*3+2];
+      data[i*9+6] = colors[i*3];
+      data[i*9+7] = colors[i*3+1];
+      data[i*9+8] = colors[i*3+2];
+    }
+    if (!chunk.vbo) chunk.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, chunk.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    chunk.vertexCount = positions.length/3;
+    chunk.dirty = false;
+  }
+
+  const player = {
+    pos:[0,70,0],
+    vel:[0,0,0],
+    yaw:0,
+    pitch:0,
+    onGround:false,
+    flying:false
+  };
+  const EYE_HEIGHT = 1.62;
+
+  const inventory = new Array(36).fill(0).map(()=>({id:0,count:0}));
+  let selectedSlot = 0;
+  let heldStack = {id:0,count:0};
+
+  function cloneStack(stack){return {id:stack.id,count:stack.count};}
+  function emptyStack(){return {id:0,count:0};}
+  function isEmpty(stack){return !stack || stack.id===0 || stack.count<=0;}
+  function stackEquals(a,b){return a.id===b.id;}
+  function maxStackSize(id){return 64;}
+
+  function addToInventory(itemId, count) {
+    if (!itemId || count<=0) return;
+    for (let i=0;i<inventory.length;i++) {
+      const slot = inventory[i];
+      if (slot.id === itemId && slot.count < maxStackSize(itemId)) {
+        const add = Math.min(count, maxStackSize(itemId) - slot.count);
+        slot.count += add;
+        count -= add;
+        if (count <= 0) {
+          updateInventoryUI();
+          scheduleSave();
+          return;
+        }
+      }
+    }
+    for (let i=0;i<inventory.length;i++) {
+      const slot = inventory[i];
+      if (slot.id === 0) {
+        const add = Math.min(count, maxStackSize(itemId));
+        slot.id = itemId;
+        slot.count = add;
+        count -= add;
+        if (count <= 0) break;
+      }
+    }
+    updateInventoryUI();
+    scheduleSave();
+  }
+
+  function removeFromInventory(slotIndex, amount) {
+    const slot = inventory[slotIndex];
+    if (!slot || slot.id === 0) return false;
+    if (slot.count < amount) return false;
+    slot.count -= amount;
+    if (slot.count === 0) slot.id = 0;
+    updateInventoryUI();
+    scheduleSave();
+    return true;
+  }
+
+  const craftingGrid = new Array(9).fill(0).map(()=>({id:0,count:0}));
+  let craftingSize = 2;
+
+  const recipes = [
+    {name:'木板', size:2, pattern:['A',''], key:{A:ITEM.LOG}, output:{id:ITEM.PLANKS,count:4}},
+    {name:'木棍', size:2, pattern:['A','A'], key:{A:ITEM.PLANKS}, output:{id:ITEM.STICK,count:4}},
+    {name:'工作台', size:2, pattern:['AA','AA'], key:{A:ITEM.PLANKS}, output:{id:ITEM.TABLE,count:1}},
+    {name:'火把', size:2, pattern:['C','S'], key:{C:ITEM.COAL,S:ITEM.STICK}, output:{id:ITEM.TORCH,count:4}},
+    {name:'木板', size:3, pattern:['A','',''], key:{A:ITEM.LOG}, output:{id:ITEM.PLANKS,count:4}}
+  ];
+
+  function clearCraftingGrid() {
+    craftingGrid.forEach(slot=>{slot.id=0;slot.count=0;});
+  }
+
+  function spillCraftingGrid() {
+    let changed = false;
+    for (let i=0;i<craftingGrid.length;i++) {
+      const slot = craftingGrid[i];
+      if (slot.id !== 0 && slot.count > 0) {
+        addToInventory(slot.id, slot.count);
+        slot.id = 0;
+        slot.count = 0;
+        changed = true;
+      }
+    }
+    if (changed) updateCraftingResult();
+  }
+
+  function inventoryToJSON() {
+    return inventory.map(slot=>({id:slot.id,count:slot.count}));
+  }
+
+  function restoreInventory(data) {
+    if (!Array.isArray(data)) return;
+    for (let i=0;i<inventory.length && i<data.length;i++) {
+      const src = data[i];
+      if (src && src.id) {
+        inventory[i].id = src.id;
+        inventory[i].count = src.count;
+      } else {
+        inventory[i].id = 0;
+        inventory[i].count = 0;
+      }
+    }
+  }
+
+  const torches = [];
+  function rebuildTorchList() {
+    torches.length = 0;
+    for (const [key, value] of modifiedBlocks.entries()) {
+      if (value === BLOCK.TORCH) {
+        const [x,y,z] = key.split(',').map(Number);
+        torches.push([x+0.5,y+0.6,z+0.5]);
+      }
+    }
+  }
+  function addTorch(x,y,z) {
+    torches.push([x,y,z]);
+  }
+  function removeTorch(x,y,z) {
+    for (let i=0;i<torches.length;i++) {
+      const t = torches[i];
+      if (Math.abs(t[0]-x)<0.01 && Math.abs(t[1]-y)<0.01 && Math.abs(t[2]-z)<0.01) {
+        torches.splice(i,1);
+        return;
+      }
+    }
+  }
+
+  if (savedData) {
+    if (savedData.player) {
+      Object.assign(player, savedData.player);
+    }
+    if (savedData.inventory) restoreInventory(savedData.inventory);
+    if (savedData.heldStack) heldStack = savedData.heldStack;
+    rebuildTorchList();
+    if (savedData.timeOfDay) timeOfDay = savedData.timeOfDay;
+    if (typeof savedData.selectedSlot === 'number') selectedSlot = Math.min(8, Math.max(0, savedData.selectedSlot));
+  } else {
+    addToInventory(ITEM.LOG, 4);
+    addToInventory(ITEM.GRASS_BLOCK, 4);
+  }
+
+  function updateTorchUniforms() {
+    const sorted = torches
+      .map(pos => ({pos, dist:distance(player.pos, pos)}))
+      .sort((a,b)=>a.dist-b.dist)
+      .slice(0, MAX_TORCH_UNIFORMS)
+      .map(entry=>entry.pos);
+    const list = sorted;
+    gl.uniform1f(uniformTorchCount, list.length);
+    for (let i=0;i<MAX_TORCH_UNIFORMS;i++) {
+      const torch = list[i];
+      if (torch) {
+        gl.uniform3f(uniformTorchPositions[i], torch[0], torch[1], torch[2]);
+      } else {
+        gl.uniform3f(uniformTorchPositions[i], 0, -999, 0);
+      }
+    }
+  }
+
+  const keyState = new Map();
+  document.addEventListener('keydown', e => {
+    if (['Tab'].includes(e.code)) e.preventDefault();
+    keyState.set(e.code, true);
+    const before = selectedSlot;
+    if (e.code === 'Digit1') selectedSlot = 0;
+    if (e.code === 'Digit2') selectedSlot = 1;
+    if (e.code === 'Digit3') selectedSlot = 2;
+    if (e.code === 'Digit4') selectedSlot = 3;
+    if (e.code === 'Digit5') selectedSlot = 4;
+    if (e.code === 'Digit6') selectedSlot = 5;
+    if (e.code === 'Digit7') selectedSlot = 6;
+    if (e.code === 'Digit8') selectedSlot = 7;
+    if (e.code === 'Digit9') selectedSlot = 8;
+    if (before !== selectedSlot) {
+      updateInventoryUI();
+      scheduleSave();
+    }
+    if (e.code === 'KeyE') toggleInventory();
+  });
+  document.addEventListener('keyup', e => keyState.set(e.code, false));
+
+  let pointerLocked = false;
+  canvas.addEventListener('click', () => {
+    if (isMobile) return;
+    if (!pointerLocked) {
+      canvas.requestPointerLock();
+    }
+  });
+  document.addEventListener('pointerlockchange', () => {
+    pointerLocked = document.pointerLockElement === canvas;
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!pointerLocked || inventoryOpen) return;
+    const sensitivity = 0.0025;
+    player.yaw -= e.movementX * sensitivity;
+    player.pitch -= e.movementY * sensitivity;
+    player.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, player.pitch));
+  });
+
+  const mouseState = {left:false,right:false};
+  canvas.addEventListener('mousedown', e => {
+    if (inventoryOpen) return;
+    if (e.button === 0) mouseState.left = true;
+    if (e.button === 2) mouseState.right = true;
+  });
+  canvas.addEventListener('mouseup', e => {
+    if (e.button === 0) mouseState.left = false;
+    if (e.button === 2) mouseState.right = false;
+  });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('wheel', e => {
+    if (inventoryOpen) return;
+    e.preventDefault();
+    const dir = e.deltaY > 0 ? 1 : -1;
+    selectedSlot = (selectedSlot + dir + 9) % 9;
+    updateInventoryUI();
+    scheduleSave();
+  }, {passive:false});
+
+  let inventoryOpen = false;
+  function toggleInventory(force) {
+    if (typeof force === 'boolean') inventoryOpen = force;
+    else inventoryOpen = !inventoryOpen;
+    inventoryLayer.style.display = inventoryOpen ? 'flex' : 'none';
+    if (inventoryOpen) {
+      pointerLocked = false;
+      if (!isMobile) document.exitPointerLock?.();
+      updateInventoryUI();
+      refreshCraftingGrid();
+    } else {
+      spillCraftingGrid();
+      if (!isEmpty(heldStack)) {
+        addToInventory(heldStack.id, heldStack.count);
+        heldStack = emptyStack();
+      }
+      updateInventoryUI();
+    }
+    scheduleSave();
+  }
+
+  if (isMobile) {
+    document.getElementById('inventory-btn').addEventListener('touchstart', e => {e.preventDefault();toggleInventory();});
+    document.getElementById('jump-btn').addEventListener('touchstart', e => {e.preventDefault();jump();});
+  }
+
+  inventoryLayer.addEventListener('mousedown', e => {
+    if (e.target === inventoryLayer) toggleInventory(false);
+  });
+  inventoryLayer.addEventListener('touchstart', e => {
+    if (e.target === inventoryLayer) { e.preventDefault(); toggleInventory(false); }
+  }, {passive:false});
+
+  function createSlotElement(className, slot, index, type) {
+    const div = document.createElement('div');
+    div.className = className;
+    const icon = document.createElement('div');
+    icon.className = 'slot-icon';
+    const count = document.createElement('div');
+    count.className = 'slot-count';
+    div.appendChild(icon);
+    div.appendChild(count);
+    div.addEventListener(isMobile ? 'touchstart':'pointerdown', e => {
+      e.preventDefault();
+      if (type === 'hotbar' && !inventoryOpen) {
+        selectedSlot = index;
+        updateInventoryUI();
+        scheduleSave();
+      } else {
+        handleSlotInteraction(slot, index, type);
+      }
+    });
+    div.dataset.index = index;
+    div.dataset.type = type;
+    return div;
+  }
+
+  const hotbarSlots = [];
+  let uiReady = false;
+  function buildUI() {
+    hotbarEl.innerHTML = '';
+    hotbarSlots.length = 0;
+    for (let i=0;i<9;i++) {
+      const slotEl = createSlotElement('hotbar-slot', inventory[i], i, 'hotbar');
+      hotbarEl.appendChild(slotEl);
+      hotbarSlots.push(slotEl);
+    }
+    inventoryGridEl.innerHTML = '';
+    for (let i=9;i<inventory.length;i++) {
+      const slotEl = createSlotElement('inventory-slot', inventory[i], i, 'inventory');
+      inventoryGridEl.appendChild(slotEl);
+    }
+    craftingGridEl.innerHTML = '';
+    for (let i=0;i<9;i++) {
+      const slotEl = createSlotElement('inventory-slot', craftingGrid[i], i, 'crafting');
+      craftingGridEl.appendChild(slotEl);
+    }
+    resultSlotEl.innerHTML = '';
+    const resIcon = document.createElement('div');
+    resIcon.className = 'slot-icon';
+    const resCount = document.createElement('div');
+    resCount.className = 'slot-count';
+    resultSlotEl.appendChild(resIcon);
+    resultSlotEl.appendChild(resCount);
+    resultSlotEl.addEventListener(isMobile ? 'touchstart' : 'pointerdown', e => {
+      e.preventDefault();
+      takeCraftingResult();
+    });
+    uiReady = true;
+    updateInventoryUI();
+  }
+  buildUI();
+
+  function slotDisplay(slotEl, slot) {
+    const icon = slotEl.querySelector('.slot-icon');
+    const countEl = slotEl.querySelector('.slot-count');
+    if (!slot || slot.id === 0) {
+      icon.style.background = 'transparent';
+      countEl.textContent = '';
+      return;
+    }
+    const item = itemDefs[slot.id];
+    if (item) {
+      const [r,g,b] = item.icon;
+      icon.style.background = `rgb(${Math.floor(r*255)},${Math.floor(g*255)},${Math.floor(b*255)})`;
+      countEl.textContent = slot.count > 1 ? slot.count : '';
+    } else {
+      icon.style.background = '#888';
+      countEl.textContent = slot.count > 1 ? slot.count : '';
+    }
+  }
+
+  function updateInventoryUI() {
+    if (!uiReady) return;
+    const hotChildren = hotbarEl.children;
+    for (let i=0;i<9;i++) {
+      const el = hotChildren[i];
+      if (!el) continue;
+      slotDisplay(el, inventory[i]);
+      el.classList.toggle('selected', i === selectedSlot);
+    }
+    const invChildren = inventoryGridEl.children;
+    for (let i=9;i<inventory.length;i++) {
+      const el = invChildren[i-9];
+      if (!el) continue;
+      slotDisplay(el, inventory[i]);
+    }
+    for (let i=0;i<(craftingSize===2?4:9);i++) {
+      const el = craftingGridEl.children[i];
+      if (!el) continue;
+      slotDisplay(el, craftingGrid[i]);
+    }
+    for (let i=(craftingSize===2?4:9); i<9; i++) {
+      const el = craftingGridEl.children[i];
+      if (el) {
+        el.style.visibility = craftingSize===3 ? 'visible':'hidden';
+        if (craftingSize!==3) {
+          craftingGrid[i].id = 0;
+          craftingGrid[i].count = 0;
+          slotDisplay(el, craftingGrid[i]);
+        }
+      }
+    }
+    craftingGridEl.classList.toggle('crafting-2', craftingSize===2);
+    craftingGridEl.classList.toggle('crafting-3', craftingSize===3);
+    craftingTitleEl.textContent = craftingSize===3 ? '3×3 合成 (附近的工作台)' : '2×2 合成';
+    updateCraftingResult();
+  }
+
+  function handleSlotInteraction(slot, index, type) {
+    if (type === 'crafting') {
+      if (index >= (craftingSize===2?4:9)) return;
+    }
+    const target = slot;
+    if (isEmpty(heldStack)) {
+      if (!isEmpty(target)) {
+        heldStack = cloneStack(target);
+        target.id = 0;
+        target.count = 0;
+      }
+    } else {
+      if (isEmpty(target)) {
+        target.id = heldStack.id;
+        target.count = heldStack.count;
+        heldStack = emptyStack();
+      } else if (stackEquals(target, heldStack)) {
+        const add = Math.min(heldStack.count, maxStackSize(target.id) - target.count);
+        target.count += add;
+        heldStack.count -= add;
+        if (heldStack.count <= 0) heldStack = emptyStack();
+      } else {
+        const temp = cloneStack(target);
+        target.id = heldStack.id;
+        target.count = heldStack.count;
+        heldStack = temp;
+      }
+    }
+    updateInventoryUI();
+    scheduleSave();
+  }
+
+  function refreshCraftingGrid() {
+    craftingSize = isNearCraftingTable() ? 3 : 2;
+    updateInventoryUI();
+  }
+
+  function craftingGridIndices(size) {
+    if (size === 2) return [0,1,3,4];
+    return [0,1,2,3,4,5,6,7,8];
+  }
+
+  function matchRecipe(recipe) {
+    if (recipe.size !== craftingSize && !(recipe.size === 2 && craftingSize === 3)) return false;
+    const size = craftingSize;
+    const needed = {};
+    const key = recipe.key;
+    const pattern = recipe.pattern;
+    let matched = true;
+    if (Array.isArray(pattern)) {
+      for (let row=0; row<recipe.size; row++) {
+        for (let col=0; col<recipe.size; col++) {
+          const patternRow = pattern[row] || '';
+          const symbol = patternRow[col] || '';
+          const gridIndex = row * size + col;
+          const slot = craftingGrid[gridIndex];
+          if (!symbol.trim()) {
+            if (slot.id !== 0) matched = false;
+          } else {
+            const expect = key[symbol];
+            if (!expect || slot.id !== expect) matched = false;
+            else needed[gridIndex] = expect;
+          }
+        }
+      }
+    }
+    if (!matched && recipe.size === 2 && craftingSize === 3) {
+      // allow recipe occupying top-left corner
+      matched = true;
+      for (let row=0; row<2; row++) {
+        for (let col=0; col<2; col++) {
+          const patternRow = pattern[row] || '';
+          const symbol = patternRow[col] || '';
+          const gridIndex = row * size + col;
+          const slot = craftingGrid[gridIndex];
+          if (!symbol.trim()) {
+            if (slot.id !== 0) matched = false;
+          } else {
+            const expect = key[symbol];
+            if (!expect || slot.id !== expect) matched = false;
+            else needed[gridIndex] = expect;
+          }
+        }
+      }
+      for (let i of [2,5,8,6,7]) {
+        if (craftingGrid[i] && craftingGrid[i].id !== 0) matched = false;
+      }
+    }
+    if (matched) {
+      for (const idx in needed) {
+        if (craftingGrid[idx].count <= 0) return false;
+      }
+    }
+    return matched;
+  }
+
+  let craftingResult = {id:0,count:0};
+  function updateCraftingResult() {
+    craftingResult = {id:0,count:0};
+    for (const recipe of recipes) {
+      if (matchRecipe(recipe)) {
+        craftingResult = cloneStack(recipe.output);
+        break;
+      }
+    }
+    const icon = resultSlotEl.querySelector('.slot-icon');
+    const countEl = resultSlotEl.querySelector('.slot-count');
+    if (!icon || !countEl) return;
+    if (craftingResult.id) {
+      const item = itemDefs[craftingResult.id];
+      const [r,g,b] = item.icon;
+      icon.style.background = `rgb(${Math.floor(r*255)},${Math.floor(g*255)},${Math.floor(b*255)})`;
+      countEl.textContent = craftingResult.count > 1 ? craftingResult.count : '';
+      resultSlotEl.classList.add('ready');
+    } else {
+      icon.style.background = 'transparent';
+      countEl.textContent = '';
+      resultSlotEl.classList.remove('ready');
+    }
+  }
+
+  function takeCraftingResult() {
+    if (!craftingResult.id) return;
+    if (!canAddItem(craftingResult.id, craftingResult.count)) return;
+    for (let i=0;i<craftingGrid.length;i++) {
+      if (craftingGrid[i].id !== 0) {
+        craftingGrid[i].count -= 1;
+        if (craftingGrid[i].count <= 0) {
+          craftingGrid[i].id = 0;
+          craftingGrid[i].count = 0;
+        }
+      }
+    }
+    addToInventory(craftingResult.id, craftingResult.count);
+    updateCraftingResult();
+    updateInventoryUI();
+  }
+
+  function canAddItem(id, count) {
+    let remaining = count;
+    for (const slot of inventory) {
+      if (slot.id === id && slot.count < maxStackSize(id)) {
+        remaining -= Math.min(maxStackSize(id) - slot.count, remaining);
+        if (remaining <= 0) return true;
+      }
+    }
+    for (const slot of inventory) {
+      if (slot.id === 0) {
+        remaining -= Math.min(maxStackSize(id), remaining);
+        if (remaining <= 0) return true;
+      }
+    }
+    return remaining <= 0;
+  }
+
+  function isNearCraftingTable() {
+    const radius = 3;
+    for (let dx=-radius; dx<=radius; dx++) {
+      for (let dy=-radius; dy<=radius; dy++) {
+        for (let dz=-radius; dz<=radius; dz++) {
+          const block = getBlock(Math.floor(player.pos[0]) + dx, Math.floor(player.pos[1]) + dy, Math.floor(player.pos[2]) + dz);
+          if (block === BLOCK.TABLE) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function savePlayerState() {
+    return {
+      pos:player.pos,
+      vel:player.vel,
+      yaw:player.yaw,
+      pitch:player.pitch
+    };
+  }
+
+  let saveTimer = 0;
+  function scheduleSave() {
+    saveTimer = 1.5;
+  }
+  function instantSave() {
+    spillCraftingGrid();
+    const data = {
+      seed: WORLD.seed,
+      player: savePlayerState(),
+      inventory: inventoryToJSON(),
+      heldStack,
+      modifications: Object.fromEntries(modifiedBlocks),
+      timeOfDay,
+      selectedSlot
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      saveIndicatorEl.style.opacity = '1';
+      setTimeout(()=>saveIndicatorEl.style.opacity='0', 1200);
+    } catch(e) {
+      console.warn('保存失败', e);
+    }
+  }
+
+  const ray = {
+    hit:false,
+    block:null,
+    normal:[0,0,0]
+  };
+
+  function raycast(maxDist=6) {
+    const start = [player.pos[0], player.pos[1] + EYE_HEIGHT, player.pos[2]];
+    const dir = getViewDir();
+    let x = Math.floor(start[0]);
+    let y = Math.floor(start[1]);
+    let z = Math.floor(start[2]);
+    const stepX = dir[0] > 0 ? 1 : -1;
+    const stepY = dir[1] > 0 ? 1 : -1;
+    const stepZ = dir[2] > 0 ? 1 : -1;
+    const deltaX = stepX / dir[0];
+    const deltaY = stepY / dir[1];
+    const deltaZ = stepZ / dir[2];
+    let tMaxX = (x + (stepX > 0 ? 1 : 0) - start[0]) / dir[0];
+    let tMaxY = (y + (stepY > 0 ? 1 : 0) - start[1]) / dir[1];
+    let tMaxZ = (z + (stepZ > 0 ? 1 : 0) - start[2]) / dir[2];
+    let face = [0,0,0];
+    if (!isFinite(tMaxX)) tMaxX = 1e9;
+    if (!isFinite(tMaxY)) tMaxY = 1e9;
+    if (!isFinite(tMaxZ)) tMaxZ = 1e9;
+    const visited = new Set();
+    while (true) {
+      if (x===undefined || y===undefined || z===undefined) break;
+      if (distance(start, [x+0.5,y+0.5,z+0.5]) > maxDist) break;
+      const blockId = getBlock(x,y,z);
+      const def = blockDefs[blockId];
+      if (def && def.selectable && blockId !== BLOCK.AIR) {
+        ray.hit = true;
+        ray.block = {x,y,z,id:blockId};
+        ray.normal = face;
+        return ray;
+      }
+      if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+        x += stepX;
+        face = [-stepX,0,0];
+        tMaxX += deltaX;
+      } else if (tMaxY < tMaxZ) {
+        y += stepY;
+        face = [0,-stepY,0];
+        tMaxY += deltaY;
+      } else {
+        z += stepZ;
+        face = [0,0,-stepZ];
+        tMaxZ += deltaZ;
+      }
+    }
+    ray.hit = false;
+    ray.block = null;
+    return ray;
+  }
+
+  function distance(a,b) {
+    const dx=a[0]-b[0];
+    const dy=a[1]-b[1];
+    const dz=a[2]-b[2];
+    return Math.sqrt(dx*dx+dy*dy+dz*dz);
+  }
+
+  function getViewDir() {
+    return [
+      Math.cos(player.pitch) * Math.sin(player.yaw),
+      Math.sin(-player.pitch),
+      Math.cos(player.pitch) * Math.cos(player.yaw)
+    ];
+  }
+
+  let highlight = null;
+
+  function mineBlock(delta) {
+    if (!ray.hit) return;
+    const {x,y,z,id} = ray.block;
+    const def = blockDefs[id];
+    if (!def) return;
+    if (!miningTarget || miningTarget.x!==x || miningTarget.y!==y || miningTarget.z!==z) {
+      miningTarget = {x,y,z};
+      miningTimer = 0;
+    }
+    miningTimer += delta;
+    if (miningTimer >= def.hardness * 0.4) {
+      setBlock(x,y,z, BLOCK.AIR);
+      addToInventory(def.drops || id, 1);
+      miningTimer = 0;
+      miningTarget = null;
+    }
+  }
+
+  function placeBlock() {
+    if (!ray.hit) return;
+    const slot = inventory[selectedSlot];
+    if (!slot || slot.id===0) return;
+    const item = itemDefs[slot.id];
+    if (!item || !item.placeable) return;
+    const placePos = {
+      x: ray.block.x + ray.normal[0],
+      y: ray.block.y + ray.normal[1],
+      z: ray.block.z + ray.normal[2]
+    };
+    if (item.blockId === BLOCK.TORCH) {
+      const below = getBlock(placePos.x, placePos.y - 1, placePos.z);
+      if (!(blockDefs[below] && blockDefs[below].solid)) return;
+    }
+    const existing = getBlock(placePos.x, placePos.y, placePos.z);
+    if (existing !== BLOCK.AIR && blockDefs[existing] && blockDefs[existing].solid) return;
+    if (playerWithinBlock(placePos)) return;
+    if (setBlock(placePos.x, placePos.y, placePos.z, item.blockId)) {
+      slot.count -= 1;
+      if (slot.count <= 0) slot.id = 0;
+      updateInventoryUI();
+      scheduleSave();
+    }
+  }
+
+  function playerWithinBlock(pos) {
+    const px = player.pos[0];
+    const py = player.pos[1];
+    const pz = player.pos[2];
+    const minX = pos.x;
+    const minY = pos.y;
+    const minZ = pos.z;
+    const maxX = pos.x + 1;
+    const maxY = pos.y + 1;
+    const maxZ = pos.z + 1;
+    const playerMinX = px - 0.3;
+    const playerMaxX = px + 0.3;
+    const playerMinY = py;
+    const playerMaxY = py + 1.8;
+    const playerMinZ = pz - 0.3;
+    const playerMaxZ = pz + 0.3;
+    return !(playerMaxX < minX || playerMinX > maxX || playerMaxY < minY || playerMinY > maxY || playerMaxZ < minZ || playerMinZ > maxZ);
+  }
+
+  const highlightBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, highlightBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    0,0,0, 1,0,0,
+    1,0,0, 1,1,0,
+    1,1,0, 0,1,0,
+    0,1,0, 0,0,0,
+    0,0,1, 1,0,1,
+    1,0,1, 1,1,1,
+    1,1,1, 0,1,1,
+    0,1,1, 0,0,1,
+    0,0,0, 0,0,1,
+    1,0,0, 1,0,1,
+    1,1,0, 1,1,1,
+    0,1,0, 0,1,1
+  ]), gl.STATIC_DRAW);
+
+  const highlightProgram = (() => {
+    const vs = createShader(gl.VERTEX_SHADER, `
+      attribute vec3 aPosition;
+      uniform mat4 uProjection;
+      uniform mat4 uView;
+      uniform vec3 uOffset;
+      void main(){
+        gl_Position = uProjection * uView * vec4(aPosition + uOffset, 1.0);
+      }
+    `);
+    const fs = createShader(gl.FRAGMENT_SHADER, `
+      precision mediump float;
+      void main(){
+        gl_FragColor = vec4(1.0,1.0,0.4,1.0);
+      }
+    `);
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    return {
+      program:prog,
+      attrib:gl.getAttribLocation(prog,'aPosition'),
+      uProjection:gl.getUniformLocation(prog,'uProjection'),
+      uView:gl.getUniformLocation(prog,'uView'),
+      uOffset:gl.getUniformLocation(prog,'uOffset')
+    };
+  })();
+
+  let timeOfDay = 0;
+  let lastTime = performance.now();
+  let miningTimer = 0;
+  let miningTarget = null;
+  let placeCooldown = 0;
+
+  function jump() {
+    if (player.onGround) {
+      player.vel[1] = 6;
+      player.onGround = false;
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && !inventoryOpen) jump();
+  });
+
+  const moveDir = [0,0,0];
+
+  function updateMovement(delta) {
+    moveDir[0]=0;moveDir[2]=0;
+    const speed = keyState.get('ShiftLeft') ? 7 : 4.2;
+    if (keyState.get('KeyW')) moveDir[2] += 1;
+    if (keyState.get('KeyS')) moveDir[2] -= 1;
+    if (keyState.get('KeyA')) moveDir[0] -= 1;
+    if (keyState.get('KeyD')) moveDir[0] += 1;
+    let len = Math.hypot(moveDir[0], moveDir[2]);
+    if (len > 0) { moveDir[0]/=len; moveDir[2]/=len; }
+    const yaw = player.yaw;
+    const forwardX = Math.sin(yaw);
+    const forwardZ = Math.cos(yaw);
+    const rightX = Math.sin(yaw + Math.PI/2);
+    const rightZ = Math.cos(yaw + Math.PI/2);
+    const vx = (forwardX * moveDir[2] + rightX * moveDir[0]) * speed;
+    const vz = (forwardZ * moveDir[2] + rightZ * moveDir[0]) * speed;
+    player.vel[0] = vx;
+    player.vel[2] = vz;
+  }
+
+  function applyPhysics(delta) {
+    player.vel[1] -= 18 * delta;
+    if (player.vel[1] < -40) player.vel[1] = -40;
+    const newPos = [...player.pos];
+    newPos[0] += player.vel[0] * delta;
+    newPos[1] += player.vel[1] * delta;
+    newPos[2] += player.vel[2] * delta;
+    const colliders = [[player.vel[0]*delta,0,0],[0,player.vel[1]*delta,0],[0,0,player.vel[2]*delta]];
+    const halfWidth = 0.3;
+    const height = 1.8;
+    const foot = 0.05;
+    let onGround = false;
+    const pos = player.pos;
+    // axis separation
+    // X
+    let step = player.vel[0] * delta;
+    pos[0] += step;
+    if (collides(pos[0], pos[1], pos[2], halfWidth, height)) {
+      pos[0] -= step;
+      while (!collides(pos[0] + Math.sign(step)*0.02, pos[1], pos[2], halfWidth, height)) {
+        pos[0] += Math.sign(step)*0.02;
+        if (Math.abs(pos[0] - newPos[0]) < 0.02) break;
+      }
+      player.vel[0] = 0;
+    }
+    // Y
+    step = player.vel[1] * delta;
+    pos[1] += step;
+    if (collides(pos[0], pos[1], pos[2], halfWidth, height)) {
+      pos[1] -= step;
+      while (!collides(pos[0], pos[1] + Math.sign(step)*0.02, pos[2], halfWidth, height)) {
+        pos[1] += Math.sign(step)*0.02;
+        if (Math.abs(pos[1] - newPos[1]) < 0.02) break;
+      }
+      if (step < 0) onGround = true;
+      player.vel[1] = 0;
+    }
+    // Z
+    step = player.vel[2] * delta;
+    pos[2] += step;
+    if (collides(pos[0], pos[1], pos[2], halfWidth, height)) {
+      pos[2] -= step;
+      while (!collides(pos[0], pos[1], pos[2] + Math.sign(step)*0.02, halfWidth, height)) {
+        pos[2] += Math.sign(step)*0.02;
+        if (Math.abs(pos[2] - newPos[2]) < 0.02) break;
+      }
+      player.vel[2] = 0;
+    }
+    player.onGround = onGround;
+  }
+
+  function collides(px, py, pz, half, height) {
+    const minX = Math.floor(px - half);
+    const maxX = Math.floor(px + half);
+    const minY = Math.floor(py);
+    const maxY = Math.floor(py + height);
+    const minZ = Math.floor(pz - half);
+    const maxZ = Math.floor(pz + half);
+    for (let x=minX;x<=maxX;x++) {
+      for (let y=minY;y<=maxY;y++) {
+        for (let z=minZ;z<=maxZ;z++) {
+          const id = getBlock(x,y,z);
+          const def = blockDefs[id];
+          if (def && def.solid) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  const matrixProjection = new Float32Array(16);
+  const matrixView = new Float32Array(16);
+
+  function ensureChunksAroundPlayer() {
+    const range = 2;
+    const px = Math.floor(player.pos[0] / WORLD.chunkSize);
+    const pz = Math.floor(player.pos[2] / WORLD.chunkSize);
+    for (let cx=px-range; cx<=px+range; cx++) {
+      for (let cz=pz-range; cz<=pz+range; cz++) {
+        const chunk = ensureChunk(cx, cz);
+        if (chunk.dirty) rebuildChunkMesh(chunk);
+      }
+    }
+  }
+
+  function renderChunks() {
+    gl.useProgram(program);
+    gl.uniformMatrix4fv(uniformProjection, false, matrixProjection);
+    gl.uniformMatrix4fv(uniformView, false, matrixView);
+    gl.uniform3f(uniformSunDir, Math.sin(timeOfDay), Math.cos(timeOfDay), 0.4);
+    const ambient = 0.25 + 0.35 * Math.max(0, Math.sin(timeOfDay));
+    gl.uniform1f(uniformAmbient, ambient);
+    updateTorchUniforms();
+    const range = 2;
+    const px = Math.floor(player.pos[0] / WORLD.chunkSize);
+    const pz = Math.floor(player.pos[2] / WORLD.chunkSize);
+    for (let cx=px-range; cx<=px+range; cx++) {
+      for (let cz=pz-range; cz<=pz+range; cz++) {
+        const chunk = ensureChunk(cx, cz);
+        if (chunk.vertexCount === 0) continue;
+        gl.bindBuffer(gl.ARRAY_BUFFER, chunk.vbo);
+        const stride = 9 * 4;
+        gl.enableVertexAttribArray(attribPosition);
+        gl.enableVertexAttribArray(attribNormal);
+        gl.enableVertexAttribArray(attribColor);
+        gl.vertexAttribPointer(attribPosition, 3, gl.FLOAT, false, stride, 0);
+        gl.vertexAttribPointer(attribNormal, 3, gl.FLOAT, false, stride, 12);
+        gl.vertexAttribPointer(attribColor, 3, gl.FLOAT, false, stride, 24);
+        gl.drawArrays(gl.TRIANGLES, 0, chunk.vertexCount);
+      }
+    }
+  }
+
+  function renderHighlight() {
+    if (!ray.hit) return;
+    const offset = [ray.block.x, ray.block.y, ray.block.z];
+    gl.useProgram(highlightProgram.program);
+    gl.uniformMatrix4fv(highlightProgram.uProjection, false, matrixProjection);
+    gl.uniformMatrix4fv(highlightProgram.uView, false, matrixView);
+    gl.uniform3f(highlightProgram.uOffset, offset[0], offset[1], offset[2]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, highlightBuffer);
+    gl.enableVertexAttribArray(highlightProgram.attrib);
+    gl.vertexAttribPointer(highlightProgram.attrib, 3, gl.FLOAT, false, 0, 0);
+    gl.lineWidth(2);
+    gl.drawArrays(gl.LINES, 0, 24);
+  }
+
+  function update(delta) {
+    ensureChunksAroundPlayer();
+    if (!inventoryOpen) {
+      updateMovement(delta);
+      applyPhysics(delta);
+      if (mouseState.left) mineBlock(delta);
+      else {
+        miningTimer = 0;
+        miningTarget = null;
+      }
+      if (mouseState.right && placeCooldown <= 0) {
+        placeBlock();
+        placeCooldown = 0.2;
+      }
+    } else {
+      miningTimer = 0;
+      miningTarget = null;
+    }
+    if (placeCooldown > 0) placeCooldown -= delta;
+    raycast();
+  }
+
+  function render() {
+    gl.clearColor(0.55*Math.max(0,Math.sin(timeOfDay))+0.1, 0.75*Math.max(0,Math.sin(timeOfDay))+0.15, 1.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    const aspect = canvas.width / canvas.height;
+    mat4Perspective(matrixProjection, Math.PI/3, aspect, 0.05, 512);
+    const eye = [player.pos[0], player.pos[1] + EYE_HEIGHT, player.pos[2]];
+    const dir = getViewDir();
+    const target = [eye[0]+dir[0], eye[1]+dir[1], eye[2]+dir[2]];
+    mat4Look(matrixView, eye, target, [0,1,0]);
+    renderChunks();
+    renderHighlight();
+  }
+
+  const leftJoystick = document.querySelector('.joystick[data-side="left"]');
+  const rightJoystick = document.querySelector('.joystick[data-side="right"]');
+  const leftInner = leftJoystick?.querySelector('.joystick-inner');
+  const rightInner = rightJoystick?.querySelector('.joystick-inner');
+  let leftTouch = null;
+  let rightTouch = null;
+  let lookTouch = null;
+  let mineTouchTimer = 0;
+  let miningTouchActive = false;
+
+  function handleJoystickStart(e, side) {
+    const touch = e.changedTouches[0];
+    if (side==='left') leftTouch = touch.identifier;
+    if (side==='right') rightTouch = touch.identifier;
+    updateJoystick(e, side, touch);
+  }
+
+  function updateJoystick(e, side, touch) {
+    const rect = (side==='left'?leftJoystick:rightJoystick).getBoundingClientRect();
+    const inner = side==='left'?leftInner:rightInner;
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    const cx = rect.width/2;
+    const cy = rect.height/2;
+    const dx = x - cx;
+    const dy = y - cy;
+    const dist = Math.hypot(dx, dy);
+    const max = rect.width/2;
+    let nx = max ? dx / max : 0;
+    let ny = max ? dy / max : 0;
+    if (nx > 1) nx = 1; if (nx < -1) nx = -1;
+    if (ny > 1) ny = 1; if (ny < -1) ny = -1;
+    let px = dx;
+    let py = dy;
+    if (dist > max && dist > 0.0001) {
+      const ratio = max / dist;
+      px = dx * ratio;
+      py = dy * ratio;
+    }
+    inner.style.transform = `translate(${px}px, ${py}px)`;
+    if (side==='left') {
+      mobileMove[0] = nx;
+      mobileMove[1] = -ny;
+    } else {
+      mobileLook[0] = nx;
+      mobileLook[1] = -ny;
+    }
+  }
+
+  function endJoystick(side) {
+    const inner = side==='left'?leftInner:rightInner;
+    inner.style.transform = 'translate(0px,0px)';
+    if (side==='left') {
+      leftTouch = null;
+      mobileMove[0]=0; mobileMove[1]=0;
+    } else {
+      rightTouch = null;
+      mobileLook[0]=0; mobileLook[1]=0;
+    }
+  }
+
+  const mobileMove = [0,0];
+  const mobileLook = [0,0];
+
+  if (isMobile) {
+    touchControlsEl.addEventListener('touchstart', e => {
+      e.preventDefault();
+      for (const touch of e.changedTouches) {
+        const target = touch.target.closest('.joystick');
+        if (target) {
+          if (inventoryOpen) continue;
+          handleJoystickStart(e, target.dataset.side);
+        } else if (!inventoryOpen) {
+          lookTouch = touch.identifier;
+          mineTouchTimer = 0;
+          miningTouchActive = false;
+        }
+      }
+    });
+    touchControlsEl.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (inventoryOpen) return;
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === leftTouch) updateJoystick(e, 'left', touch);
+        if (touch.identifier === rightTouch) updateJoystick(e, 'right', touch);
+      }
+    }, {passive:false});
+    touchControlsEl.addEventListener('touchend', e => {
+      e.preventDefault();
+      if (inventoryOpen) {
+        leftTouch = rightTouch = lookTouch = null;
+        mobileMove[0] = mobileMove[1] = 0;
+        mobileLook[0] = mobileLook[1] = 0;
+        miningTouchActive = false;
+        mineTouchTimer = 0;
+        miningTimer = 0;
+        miningTarget = null;
+        return;
+      }
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === leftTouch) endJoystick('left');
+        if (touch.identifier === rightTouch) endJoystick('right');
+        if (touch.identifier === lookTouch) {
+          if (!miningTouchActive && !inventoryOpen) {
+            placeBlock();
+          }
+          lookTouch = null;
+          miningTouchActive = false;
+        }
+      }
+    });
+    touchControlsEl.addEventListener('touchcancel', e => {
+      e.preventDefault();
+      if (inventoryOpen) {
+        leftTouch = rightTouch = lookTouch = null;
+        mobileMove[0] = mobileMove[1] = 0;
+        mobileLook[0] = mobileLook[1] = 0;
+        miningTouchActive = false;
+        mineTouchTimer = 0;
+        miningTimer = 0;
+        miningTarget = null;
+        return;
+      }
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === leftTouch) endJoystick('left');
+        if (touch.identifier === rightTouch) endJoystick('right');
+        if (touch.identifier === lookTouch) {
+          lookTouch = null;
+          miningTouchActive = false;
+        }
+      }
+    });
+  }
+
+  function updateMobileLook(delta) {
+    if (!isMobile) return;
+    if (inventoryOpen) {
+      mobileMove[0] = mobileMove[1] = 0;
+      mobileLook[0] = mobileLook[1] = 0;
+      return;
+    }
+    const lookSpeed = 1.8;
+    player.yaw -= mobileLook[0] * lookSpeed * delta;
+    player.pitch -= mobileLook[1] * lookSpeed * delta;
+    player.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, player.pitch));
+    const moveSpeed = 4.2;
+    const yaw = player.yaw;
+    const forwardX = Math.sin(yaw);
+    const forwardZ = Math.cos(yaw);
+    const rightX = Math.sin(yaw + Math.PI/2);
+    const rightZ = Math.cos(yaw + Math.PI/2);
+    const mvx = (forwardX * mobileMove[1] + rightX * mobileMove[0]) * moveSpeed;
+    const mvz = (forwardZ * mobileMove[1] + rightZ * mobileMove[0]) * moveSpeed;
+    player.vel[0] = mvx;
+    player.vel[2] = mvz;
+  }
+
+  canvas.addEventListener('touchstart', e => {
+    if (isMobile) {
+      e.preventDefault();
+    }
+  }, {passive:false});
+
+  function updateMobileMining(delta) {
+    if (!isMobile) return;
+    if (inventoryOpen) {
+      miningTouchActive = false;
+      mineTouchTimer = 0;
+      miningTimer = 0;
+      miningTarget = null;
+      return;
+    }
+    if (lookTouch !== null) {
+      mineTouchTimer += delta;
+      if (mineTouchTimer > 0.4) {
+        miningTouchActive = true;
+        mineBlock(delta);
+      }
+    } else {
+      miningTouchActive = false;
+      mineTouchTimer = 0;
+      miningTimer = 0;
+      miningTarget = null;
+    }
+  }
+
+  function cleanUnusedChunks() {
+    const range = 3;
+    const px = Math.floor(player.pos[0] / WORLD.chunkSize);
+    const pz = Math.floor(player.pos[2] / WORLD.chunkSize);
+    for (const [key, chunk] of WORLD.chunks.entries()) {
+      if (Math.abs(chunk.cx - px) > range || Math.abs(chunk.cz - pz) > range) {
+        WORLD.chunks.delete(key);
+        if (chunk.vbo) gl.deleteBuffer(chunk.vbo);
+      }
+    }
+  }
+
+  function updateHUD(delta) {
+    debugEl.textContent = `XYZ ${player.pos.map(v=>v.toFixed(1)).join(' ')}\n区块 ${Math.floor(player.pos[0]/WORLD.chunkSize)},${Math.floor(player.pos[2]/WORLD.chunkSize)}`;
+  }
+
+  function gameLoop(now) {
+    const delta = Math.min(0.05, (now - lastTime)/1000);
+    lastTime = now;
+    timeOfDay += delta * 0.25;
+    if (timeOfDay > Math.PI * 2) timeOfDay -= Math.PI * 2;
+    update(delta);
+    updateMobileLook(delta);
+    updateMobileMining(delta);
+    render();
+    updateHUD(delta);
+    if (saveTimer > 0) {
+      saveTimer -= delta;
+      if (saveTimer <= 0) instantSave();
+    }
+    cleanUnusedChunks();
+    requestAnimationFrame(gameLoop);
+  }
+  requestAnimationFrame(gameLoop);
+
+  window.addEventListener('beforeunload', instantSave);
+
+})();
+</script>
+</body>
+</html>
