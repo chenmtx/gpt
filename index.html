@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>方块冒险 - Web 版</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #000;
+      color: #fff;
+    }
+    body.touch-active {
+      cursor: default;
+    }
+    #game {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      touch-action: none;
+    }
+    #overlay {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      padding: 0.9rem 1rem;
+      border-radius: 1rem;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(12px);
+      max-width: min(340px, 80vw);
+      pointer-events: none;
+      line-height: 1.5;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
+    }
+    #overlay strong {
+      display: block;
+      font-size: 1.1rem;
+      margin-bottom: 0.35rem;
+    }
+    #overlay span.code {
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.45rem;
+      background: rgba(255, 255, 255, 0.12);
+      font-family: "JetBrains Mono", "Fira Code", monospace;
+      font-size: 0.85rem;
+    }
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 26px;
+      height: 26px;
+      margin-left: -13px;
+      margin-top: -13px;
+      pointer-events: none;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 18px rgba(255, 255, 255, 0.28);
+    }
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 2px;
+      height: 70%;
+      background: rgba(255, 255, 255, 0.85);
+      transform: translate(-50%, -50%);
+    }
+    #crosshair::after {
+      transform: translate(-50%, -50%) rotate(90deg);
+    }
+    #hotbar {
+      position: fixed;
+      left: 50%;
+      bottom: clamp(1.4rem, 3.5vh, 3.2rem);
+      transform: translateX(-50%);
+      display: flex;
+      gap: 0.65rem;
+      padding: 0.6rem 0.85rem;
+      border-radius: 1rem;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    }
+    .hotbar-item {
+      width: clamp(44px, 11vw, 58px);
+      height: clamp(44px, 11vw, 58px);
+      border-radius: 0.9rem;
+      border: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(0.78rem, 2.2vw, 0.9rem);
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.18s ease;
+      background: rgba(255, 255, 255, 0.16);
+    }
+    .hotbar-item:hover {
+      transform: translateY(-2px) scale(1.02);
+    }
+    .hotbar-item.active {
+      border-color: #ffd447;
+      box-shadow: 0 0 18px rgba(255, 212, 71, 0.55);
+    }
+    #status-line {
+      margin-top: 0.6rem;
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+    #target-info {
+      font-weight: 600;
+      color: #ffd447;
+    }
+    #mobile-ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: none;
+    }
+    body.touch-active #mobile-ui {
+      display: block;
+    }
+    #mobile-ui .buttons {
+      position: fixed;
+      bottom: clamp(1.5rem, 4vh, 3rem);
+      right: clamp(1rem, 3vw, 2.8rem);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(0.6rem, 2vh, 1rem);
+    }
+    #mobile-ui button {
+      pointer-events: auto;
+      font-size: clamp(0.85rem, 2.4vw, 1rem);
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 0.55rem 1.1rem;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+    }
+    #mobile-ui button:active {
+      transform: scale(0.95);
+      background: rgba(255, 255, 255, 0.18);
+      color: #000;
+    }
+    .joystick {
+      position: fixed;
+      width: clamp(110px, 28vw, 140px);
+      height: clamp(110px, 28vw, 140px);
+      margin-left: calc(-0.5 * clamp(110px, 28vw, 140px));
+      margin-top: calc(-0.5 * clamp(110px, 28vw, 140px));
+      display: none;
+      pointer-events: none;
+      touch-action: none;
+    }
+    .joystick.active {
+      display: block;
+    }
+    .joystick .base {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(10px);
+    }
+    .joystick .stick {
+      position: absolute;
+      width: clamp(54px, 14vw, 68px);
+      height: clamp(54px, 14vw, 68px);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.38);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+      transition: transform 0.06s ease;
+    }
+    @media (max-width: 680px) {
+      #overlay {
+        top: 0.7rem;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+        width: calc(100vw - 1.4rem);
+      }
+      #hotbar {
+        bottom: clamp(0.8rem, 2vh, 1.6rem);
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="overlay">
+    <strong>方块冒险（Java风格玩法）</strong>
+    <div>桌面端：<span class="code">WASD</span> 移动，<span class="code">空格</span> 跳跃，鼠标左键破坏，右键放置，滚轮或数字键切换方块。</div>
+    <div>移动端：拖动左摇杆移动、右摇杆观察，按钮放置/破坏方块。</div>
+    <div id="status-line">当前方块：<span id="current-block">草方块</span> | 瞄准：<span id="target-info">无</span></div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="hotbar"></div>
+  <div id="mobile-ui">
+    <div id="move-joystick" class="joystick">
+      <div class="base"></div>
+      <div class="stick"></div>
+    </div>
+    <div id="look-joystick" class="joystick">
+      <div class="base"></div>
+      <div class="stick"></div>
+    </div>
+    <div class="buttons">
+      <button id="jump-btn">跳跃</button>
+      <button id="break-btn">破坏</button>
+      <button id="place-btn">放置</button>
+      <button id="cycle-btn">换方块</button>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const canvas = document.getElementById('game');
+      const gl = canvas.getContext('webgl', { antialias: true, alpha: false });
+      if (!gl) {
+        alert('当前设备不支持 WebGL，无法加载游戏世界。');
+        return;
+      }
+
+      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      if (isTouchDevice) {
+        document.body.classList.add('touch-active');
+      }
+
+      const DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+      function resize() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        canvas.width = width * DPR;
+        canvas.height = height * DPR;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      const vertexSource = `
+        attribute vec3 aPosition;
+        attribute vec3 aNormal;
+        attribute vec3 aColor;
+        uniform mat4 uProjection;
+        uniform mat4 uView;
+        uniform vec3 uLightDir;
+        varying vec3 vColor;
+        varying float vLighting;
+        void main() {
+          gl_Position = uProjection * uView * vec4(aPosition, 1.0);
+          float light = max(dot(normalize(aNormal), normalize(uLightDir)), 0.0);
+          vLighting = 0.35 + light * 0.65;
+          vColor = aColor;
+        }
+      `;
+
+      const fragmentSource = `
+        precision mediump float;
+        varying vec3 vColor;
+        varying float vLighting;
+        void main() {
+          gl_FragColor = vec4(vColor * vLighting, 1.0);
+        }
+      `;
+
+      function compileShader(type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          console.error(gl.getShaderInfoLog(shader));
+          throw new Error('着色器编译失败');
+        }
+        return shader;
+      }
+
+      function createProgram(vsSource, fsSource) {
+        const program = gl.createProgram();
+        gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vsSource));
+        gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fsSource));
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          console.error(gl.getProgramInfoLog(program));
+          throw new Error('着色器链接失败');
+        }
+        return program;
+      }
+
+      const program = createProgram(vertexSource, fragmentSource);
+      gl.useProgram(program);
+
+      const attribLocation = {
+        position: gl.getAttribLocation(program, 'aPosition'),
+        normal: gl.getAttribLocation(program, 'aNormal'),
+        color: gl.getAttribLocation(program, 'aColor')
+      };
+      const uniformLocation = {
+        projection: gl.getUniformLocation(program, 'uProjection'),
+        view: gl.getUniformLocation(program, 'uView'),
+        lightDir: gl.getUniformLocation(program, 'uLightDir')
+      };
+
+      const buffers = {
+        position: gl.createBuffer(),
+        normal: gl.createBuffer(),
+        color: gl.createBuffer()
+      };
+      let vertexCount = 0;
+
+      const BLOCK_INFO = {
+        0: { name: '空气', color: [0, 0, 0] },
+        1: { name: '草方块', color: [0.42, 0.76, 0.34] },
+        2: { name: '泥土', color: [0.58, 0.39, 0.23] },
+        3: { name: '石头', color: [0.6, 0.6, 0.62] },
+        4: { name: '原木', color: [0.56, 0.38, 0.23] },
+        5: { name: '树叶', color: [0.27, 0.56, 0.32] },
+        6: { name: '砂石', color: [0.88, 0.82, 0.63] }
+      };
+      const HOTBAR_BLOCKS = [1, 2, 3, 4, 5, 6];
+
+      const WORLD_WIDTH = 48;
+      const WORLD_HEIGHT = 32;
+      const WORLD_DEPTH = 48;
+      const world = new Uint8Array(WORLD_WIDTH * WORLD_HEIGHT * WORLD_DEPTH);
+
+      function worldIndex(x, y, z) {
+        return x + z * WORLD_WIDTH + y * WORLD_WIDTH * WORLD_DEPTH;
+      }
+
+      function getBlock(x, y, z) {
+        if (x < 0 || x >= WORLD_WIDTH || z < 0 || z >= WORLD_DEPTH) {
+          return 0;
+        }
+        if (y < 0) {
+          return 3;
+        }
+        if (y >= WORLD_HEIGHT) {
+          return 0;
+        }
+        return world[worldIndex(x, y, z)];
+      }
+
+      function setBlock(x, y, z, type) {
+        if (x < 0 || x >= WORLD_WIDTH || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= WORLD_DEPTH) {
+          return;
+        }
+        world[worldIndex(x, y, z)] = type;
+        meshDirty = true;
+      }
+
+      function fract(n) {
+        return n - Math.floor(n);
+      }
+
+      function pseudoRandom(x, z) {
+        const s = Math.sin(x * 157.532 + z * 311.719);
+        return fract(s * 43758.5453);
+      }
+
+      function generateWorld() {
+        for (let x = 0; x < WORLD_WIDTH; x++) {
+          for (let z = 0; z < WORLD_DEPTH; z++) {
+            const nx = x / WORLD_WIDTH - 0.5;
+            const nz = z / WORLD_DEPTH - 0.5;
+            const hill = Math.sin(nx * Math.PI * 1.8) * 3 + Math.cos(nz * Math.PI * 1.4) * 2.5;
+            const base = 8 + hill;
+            const height = Math.floor(Math.max(3, Math.min(WORLD_HEIGHT - 2, base + pseudoRandom(x, z) * 2)));
+            for (let y = 0; y < WORLD_HEIGHT; y++) {
+              let type = 0;
+              if (y === 0) {
+                type = 3;
+              } else if (y < height - 3) {
+                type = 3;
+              } else if (y < height - 1) {
+                type = 2;
+              } else if (y === height - 1) {
+                type = 1;
+              }
+              if (type !== 0) {
+                world[worldIndex(x, y, z)] = type;
+              }
+            }
+            const treeChance = pseudoRandom(x + 11.3, z - 4.7);
+            if (treeChance > 0.88 && height < WORLD_HEIGHT - 6) {
+              const treeHeight = 4 + Math.floor(pseudoRandom(x * 0.7, z * 0.9) * 3);
+              for (let y = 0; y < treeHeight; y++) {
+                world[worldIndex(x, height + y, z)] = 4;
+              }
+              for (let ty = -2; ty <= 2; ty++) {
+                for (let tx = -2; tx <= 2; tx++) {
+                  for (let tz = -2; tz <= 2; tz++) {
+                    const dist = Math.abs(tx) + Math.abs(ty) + Math.abs(tz);
+                    if (dist <= 3) {
+                      const lx = x + tx;
+                      const ly = height + treeHeight - 2 + ty;
+                      const lz = z + tz;
+                      if (lx >= 0 && lx < WORLD_WIDTH && ly >= 0 && ly < WORLD_HEIGHT && lz >= 0 && lz < WORLD_DEPTH) {
+                        if (world[worldIndex(lx, ly, lz)] === 0) {
+                          world[worldIndex(lx, ly, lz)] = 5;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      generateWorld();
+
+      const player = {
+        position: { x: WORLD_WIDTH / 2, y: 18, z: WORLD_DEPTH / 2 },
+        velocity: { x: 0, y: 0, z: 0 },
+        yaw: Math.PI * 0.25,
+        pitch: 0,
+        radius: 0.35,
+        height: 1.8,
+        eyeHeight: 1.62,
+        onGround: false
+      };
+
+      (function placePlayerOnSurface() {
+        const px = Math.floor(WORLD_WIDTH / 2);
+        const pz = Math.floor(WORLD_DEPTH / 2);
+        let py = WORLD_HEIGHT - 1;
+        while (py > 1 && getBlock(px, py, pz) === 0) {
+          py--;
+        }
+        player.position.x = px + 0.5;
+        player.position.z = pz + 0.5;
+        player.position.y = py + 2.4;
+      })();
+
+      const keyState = Object.create(null);
+      window.addEventListener('keydown', (event) => {
+        if ([
+          'Space',
+          'ArrowUp',
+          'ArrowDown',
+          'ArrowLeft',
+          'ArrowRight'
+        ].includes(event.code)) {
+          event.preventDefault();
+        }
+        keyState[event.code] = true;
+        if (event.code === 'Space') {
+          attemptJump();
+        }
+        if (event.code === 'Digit1') selectBlock(0);
+        if (event.code === 'Digit2') selectBlock(1);
+        if (event.code === 'Digit3') selectBlock(2);
+        if (event.code === 'Digit4') selectBlock(3);
+        if (event.code === 'Digit5') selectBlock(4);
+        if (event.code === 'Digit6') selectBlock(5);
+        if (event.code === 'KeyQ') cycleBlock(-1);
+        if (event.code === 'KeyE') cycleBlock(1);
+      });
+      window.addEventListener('keyup', (event) => {
+        keyState[event.code] = false;
+      });
+
+      canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+
+      canvas.addEventListener('mousedown', (event) => {
+        if (!isTouchDevice && document.pointerLockElement !== canvas) {
+          canvas.requestPointerLock();
+        }
+        if (event.button === 0) {
+          breakBlock();
+        } else if (event.button === 2) {
+          placeBlock();
+        }
+      });
+
+      canvas.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const delta = event.deltaY;
+        if (delta > 0) {
+          cycleBlock(1);
+        } else {
+          cycleBlock(-1);
+        }
+      }, { passive: false });
+
+      window.addEventListener('mousemove', (event) => {
+        if (document.pointerLockElement === canvas) {
+          const sensitivity = 0.0025;
+          player.yaw -= event.movementX * sensitivity;
+          player.pitch -= event.movementY * sensitivity;
+          clampPitch();
+        }
+      });
+
+      let meshDirty = true;
+      const positionData = [];
+      const normalData = [];
+      const colorData = [];
+      const FACES = [
+        { dir: [0, 0, -1], verts: [[0, 0, 0], [1, 1, 0], [1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]] },
+        { dir: [0, 0, 1], verts: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 0, 1], [1, 1, 1], [0, 1, 1]] },
+        { dir: [-1, 0, 0], verts: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 0, 0], [0, 1, 1], [0, 1, 0]] },
+        { dir: [1, 0, 0], verts: [[1, 0, 0], [1, 1, 1], [1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]] },
+        { dir: [0, 1, 0], verts: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [0, 1, 0], [1, 1, 1], [1, 1, 0]] },
+        { dir: [0, -1, 0], verts: [[0, 0, 0], [1, 0, 1], [1, 0, 0], [0, 0, 0], [0, 0, 1], [1, 0, 1]] }
+      ];
+
+      function rebuildMesh() {
+        positionData.length = 0;
+        normalData.length = 0;
+        colorData.length = 0;
+        for (let x = 0; x < WORLD_WIDTH; x++) {
+          for (let y = 0; y < WORLD_HEIGHT; y++) {
+            for (let z = 0; z < WORLD_DEPTH; z++) {
+              const block = world[worldIndex(x, y, z)];
+              if (block === 0) continue;
+              const color = BLOCK_INFO[block].color;
+              for (const face of FACES) {
+                const nx = x + face.dir[0];
+                const ny = y + face.dir[1];
+                const nz = z + face.dir[2];
+                if (getBlock(nx, ny, nz) === 0) {
+                  for (const v of face.verts) {
+                    positionData.push(x + v[0], y + v[1], z + v[2]);
+                    normalData.push(face.dir[0], face.dir[1], face.dir[2]);
+                    colorData.push(color[0], color[1], color[2]);
+                  }
+                }
+              }
+            }
+          }
+        }
+        const positions = new Float32Array(positionData);
+        const normals = new Float32Array(normalData);
+        const colors = new Float32Array(colorData);
+        vertexCount = positions.length / 3;
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.normal);
+        gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.color);
+        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+
+        gl.enableVertexAttribArray(attribLocation.position);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+        gl.vertexAttribPointer(attribLocation.position, 3, gl.FLOAT, false, 0, 0);
+
+        gl.enableVertexAttribArray(attribLocation.normal);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.normal);
+        gl.vertexAttribPointer(attribLocation.normal, 3, gl.FLOAT, false, 0, 0);
+
+        gl.enableVertexAttribArray(attribLocation.color);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.color);
+        gl.vertexAttribPointer(attribLocation.color, 3, gl.FLOAT, false, 0, 0);
+      }
+
+      function mat4Identity(out) {
+        out[0] = 1; out[1] = 0; out[2] = 0; out[3] = 0;
+        out[4] = 0; out[5] = 1; out[6] = 0; out[7] = 0;
+        out[8] = 0; out[9] = 0; out[10] = 1; out[11] = 0;
+        out[12] = 0; out[13] = 0; out[14] = 0; out[15] = 1;
+        return out;
+      }
+
+      function mat4Perspective(out, fovy, aspect, near, far) {
+        const f = 1.0 / Math.tan(fovy / 2);
+        out[0] = f / aspect;
+        out[1] = 0;
+        out[2] = 0;
+        out[3] = 0;
+        out[4] = 0;
+        out[5] = f;
+        out[6] = 0;
+        out[7] = 0;
+        out[8] = 0;
+        out[9] = 0;
+        out[10] = (far + near) / (near - far);
+        out[11] = -1;
+        out[12] = 0;
+        out[13] = 0;
+        out[14] = (2 * far * near) / (near - far);
+        out[15] = 0;
+        return out;
+      }
+
+      function mat4LookAt(out, eye, center, up) {
+        let x0, x1, x2, y0, y1, y2, z0, z1, z2;
+        z0 = eye[0] - center[0];
+        z1 = eye[1] - center[1];
+        z2 = eye[2] - center[2];
+        let len = Math.hypot(z0, z1, z2);
+        if (len === 0) {
+          z2 = 1;
+        } else {
+          z0 /= len;
+          z1 /= len;
+          z2 /= len;
+        }
+        x0 = up[1] * z2 - up[2] * z1;
+        x1 = up[2] * z0 - up[0] * z2;
+        x2 = up[0] * z1 - up[1] * z0;
+        len = Math.hypot(x0, x1, x2);
+        if (len === 0) {
+          x0 = 0;
+          x1 = 0;
+          x2 = 0;
+        } else {
+          x0 /= len;
+          x1 /= len;
+          x2 /= len;
+        }
+        y0 = z1 * x2 - z2 * x1;
+        y1 = z2 * x0 - z0 * x2;
+        y2 = z0 * x1 - z1 * x0;
+        len = Math.hypot(y0, y1, y2);
+        if (len === 0) {
+          y0 = 0;
+          y1 = 0;
+          y2 = 0;
+        } else {
+          y0 /= len;
+          y1 /= len;
+          y2 /= len;
+        }
+        out[0] = x0; out[1] = y0; out[2] = z0; out[3] = 0;
+        out[4] = x1; out[5] = y1; out[6] = z1; out[7] = 0;
+        out[8] = x2; out[9] = y2; out[10] = z2; out[11] = 0;
+        out[12] = -(x0 * eye[0] + x1 * eye[1] + x2 * eye[2]);
+        out[13] = -(y0 * eye[0] + y1 * eye[1] + y2 * eye[2]);
+        out[14] = -(z0 * eye[0] + z1 * eye[1] + z2 * eye[2]);
+        out[15] = 1;
+        return out;
+      }
+
+      const projectionMatrix = mat4Identity(new Float32Array(16));
+      const viewMatrix = mat4Identity(new Float32Array(16));
+
+      function updateProjection() {
+        const aspect = canvas.width / canvas.height;
+        mat4Perspective(projectionMatrix, Math.PI / 3, aspect, 0.1, 120.0);
+        gl.uniformMatrix4fv(uniformLocation.projection, false, projectionMatrix);
+      }
+      updateProjection();
+
+      const currentBlockLabel = document.getElementById('current-block');
+      const targetLabel = document.getElementById('target-info');
+
+      const hotbar = document.getElementById('hotbar');
+      const hotbarButtons = [];
+      HOTBAR_BLOCKS.forEach((type, index) => {
+        const btn = document.createElement('div');
+        btn.className = 'hotbar-item';
+        const color = BLOCK_INFO[type].color;
+        btn.style.background = `rgba(${Math.round(color[0] * 255)}, ${Math.round(color[1] * 255)}, ${Math.round(color[2] * 255)}, 0.65)`;
+        btn.textContent = index + 1;
+        btn.title = BLOCK_INFO[type].name;
+        btn.addEventListener('click', () => selectBlock(index));
+        hotbar.appendChild(btn);
+        hotbarButtons.push(btn);
+      });
+
+      let selectedIndex = 0;
+      function selectBlock(index) {
+        selectedIndex = (index % HOTBAR_BLOCKS.length + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length;
+        const type = HOTBAR_BLOCKS[selectedIndex];
+        currentBlockLabel.textContent = BLOCK_INFO[type].name;
+        hotbarButtons.forEach((btn, idx) => {
+          btn.classList.toggle('active', idx === selectedIndex);
+        });
+      }
+      function cycleBlock(dir) {
+        selectBlock(selectedIndex + dir);
+      }
+      selectBlock(0);
+
+      const mobileUI = document.getElementById('mobile-ui');
+      const jumpBtn = document.getElementById('jump-btn');
+      const breakBtn = document.getElementById('break-btn');
+      const placeBtn = document.getElementById('place-btn');
+      const cycleBtn = document.getElementById('cycle-btn');
+
+      jumpBtn.addEventListener('click', attemptJump);
+      breakBtn.addEventListener('click', breakBlock);
+      placeBtn.addEventListener('click', placeBlock);
+      cycleBtn.addEventListener('click', () => cycleBlock(1));
+
+      const moveJoystick = document.getElementById('move-joystick');
+      const lookJoystick = document.getElementById('look-joystick');
+      const moveStick = moveJoystick.querySelector('.stick');
+      const lookStick = lookJoystick.querySelector('.stick');
+
+      const moveInput = { x: 0, y: 0 };
+      const lookInput = { x: 0, y: 0 };
+      let moveTouchId = null;
+      let lookTouchId = null;
+      const maxJoystickDist = 48;
+
+      function resetMoveJoystick() {
+        moveInput.x = 0;
+        moveInput.y = 0;
+        moveTouchId = null;
+        moveStick.style.transform = 'translate(-50%, -50%)';
+        moveJoystick.classList.remove('active');
+      }
+      function resetLookJoystick() {
+        lookInput.x = 0;
+        lookInput.y = 0;
+        lookTouchId = null;
+        lookStick.style.transform = 'translate(-50%, -50%)';
+        lookJoystick.classList.remove('active');
+      }
+
+      function handleTouchStart(event) {
+        for (const touch of event.changedTouches) {
+          const targetTag = touch.target.tagName;
+          if (targetTag === 'BUTTON') {
+            continue;
+          }
+          event.preventDefault();
+          if (touch.clientX < window.innerWidth * 0.45 && moveTouchId === null) {
+            moveTouchId = touch.identifier;
+            moveJoystick.classList.add('active');
+            moveJoystick.style.left = `${touch.clientX}px`;
+            moveJoystick.style.top = `${touch.clientY}px`;
+            moveStick.style.transform = 'translate(-50%, -50%)';
+          } else if (lookTouchId === null) {
+            lookTouchId = touch.identifier;
+            lookJoystick.classList.add('active');
+            lookJoystick.style.left = `${touch.clientX}px`;
+            lookJoystick.style.top = `${touch.clientY}px`;
+            lookStick.style.transform = 'translate(-50%, -50%)';
+          }
+        }
+      }
+
+      function handleTouchMove(event) {
+        for (const touch of event.changedTouches) {
+          if (touch.identifier === moveTouchId) {
+            event.preventDefault();
+            const rect = moveJoystick.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const dx = touch.clientX - centerX;
+            const dy = touch.clientY - centerY;
+            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxJoystickDist);
+            const angle = Math.atan2(dy, dx);
+            const offsetX = Math.cos(angle) * dist;
+            const offsetY = Math.sin(angle) * dist;
+            moveStick.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+            moveInput.x = offsetX / maxJoystickDist;
+            moveInput.y = -offsetY / maxJoystickDist;
+          } else if (touch.identifier === lookTouchId) {
+            event.preventDefault();
+            const rect = lookJoystick.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const dx = touch.clientX - centerX;
+            const dy = touch.clientY - centerY;
+            const dist = Math.min(Math.sqrt(dx * dx + dy * dy), maxJoystickDist);
+            const angle = Math.atan2(dy, dx);
+            const offsetX = Math.cos(angle) * dist;
+            const offsetY = Math.sin(angle) * dist;
+            lookStick.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+            lookInput.x = offsetX / maxJoystickDist;
+            lookInput.y = offsetY / maxJoystickDist;
+          }
+        }
+      }
+
+      function handleTouchEnd(event) {
+        for (const touch of event.changedTouches) {
+          if (touch.identifier === moveTouchId) {
+            resetMoveJoystick();
+          }
+          if (touch.identifier === lookTouchId) {
+            resetLookJoystick();
+          }
+        }
+      }
+
+      if (isTouchDevice) {
+        document.addEventListener('touchstart', handleTouchStart, { passive: false });
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        document.addEventListener('touchend', handleTouchEnd, { passive: true });
+        document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+      }
+
+      function clampPitch() {
+        const limit = Math.PI / 2 - 0.05;
+        if (player.pitch > limit) player.pitch = limit;
+        if (player.pitch < -limit) player.pitch = -limit;
+      }
+
+      function attemptJump() {
+        if (player.onGround) {
+          player.velocity.y = 7.6;
+          player.onGround = false;
+        }
+      }
+
+      function breakBlock() {
+        const hit = pickBlock(6);
+        if (hit) {
+          setBlock(hit.x, hit.y, hit.z, 0);
+        }
+      }
+
+      function placeBlock() {
+        const hit = pickBlock(6);
+        if (!hit) return;
+        const normal = hit.normal;
+        if (!normal) return;
+        const targetX = hit.x + normal[0];
+        const targetY = hit.y + normal[1];
+        const targetZ = hit.z + normal[2];
+        if (!canPlaceBlock(targetX, targetY, targetZ)) return;
+        const type = HOTBAR_BLOCKS[selectedIndex];
+        setBlock(targetX, targetY, targetZ, type);
+      }
+
+      function canPlaceBlock(x, y, z) {
+        if (getBlock(x, y, z) !== 0) return false;
+        const blockMinX = x;
+        const blockMaxX = x + 1;
+        const blockMinY = y;
+        const blockMaxY = y + 1;
+        const blockMinZ = z;
+        const blockMaxZ = z + 1;
+        const playerMinX = player.position.x - player.radius;
+        const playerMaxX = player.position.x + player.radius;
+        const playerMinY = player.position.y;
+        const playerMaxY = player.position.y + player.height;
+        const playerMinZ = player.position.z - player.radius;
+        const playerMaxZ = player.position.z + player.radius;
+        const intersect = !(blockMaxX <= playerMinX || blockMinX >= playerMaxX || blockMaxY <= playerMinY || blockMinY >= playerMaxY || blockMaxZ <= playerMinZ || blockMinZ >= playerMaxZ);
+        return !intersect;
+      }
+
+      const rayDirection = { x: 0, y: 0, z: 0 };
+      function getViewDirection() {
+        const cp = Math.cos(player.pitch);
+        rayDirection.x = Math.cos(player.yaw) * cp;
+        rayDirection.y = Math.sin(player.pitch);
+        rayDirection.z = Math.sin(player.yaw) * cp;
+        return rayDirection;
+      }
+
+      function pickBlock(maxDistance) {
+        const origin = {
+          x: player.position.x,
+          y: player.position.y + player.eyeHeight,
+          z: player.position.z
+        };
+        const dir = getViewDirection();
+        let x = Math.floor(origin.x);
+        let y = Math.floor(origin.y);
+        let z = Math.floor(origin.z);
+        if (getBlock(x, y, z) !== 0) {
+          return { x, y, z, normal: [0, 0, 0], block: getBlock(x, y, z), distance: 0 };
+        }
+        const stepX = dir.x > 0 ? 1 : -1;
+        const stepY = dir.y > 0 ? 1 : -1;
+        const stepZ = dir.z > 0 ? 1 : -1;
+        const deltaX = dir.x !== 0 ? Math.abs(1 / dir.x) : Infinity;
+        const deltaY = dir.y !== 0 ? Math.abs(1 / dir.y) : Infinity;
+        const deltaZ = dir.z !== 0 ? Math.abs(1 / dir.z) : Infinity;
+        const fracX = origin.x - Math.floor(origin.x);
+        const fracY = origin.y - Math.floor(origin.y);
+        const fracZ = origin.z - Math.floor(origin.z);
+        let tMaxX = dir.x > 0 ? (1 - fracX) * deltaX : fracX * deltaX;
+        let tMaxY = dir.y > 0 ? (1 - fracY) * deltaY : fracY * deltaY;
+        let tMaxZ = dir.z > 0 ? (1 - fracZ) * deltaZ : fracZ * deltaZ;
+        if (dir.x === 0) tMaxX = Infinity;
+        if (dir.y === 0) tMaxY = Infinity;
+        if (dir.z === 0) tMaxZ = Infinity;
+        let distance = 0;
+        let lastNormal = null;
+        while (distance <= maxDistance) {
+          if (x < 0 || x >= WORLD_WIDTH || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= WORLD_DEPTH) {
+            return null;
+          }
+          const block = getBlock(x, y, z);
+          if (block !== 0 && distance > 0.01) {
+            return { x, y, z, normal: lastNormal, block, distance };
+          }
+          if (tMaxX < tMaxY) {
+            if (tMaxX < tMaxZ) {
+              x += stepX;
+              distance = tMaxX;
+              tMaxX += deltaX;
+              lastNormal = [-stepX, 0, 0];
+            } else {
+              z += stepZ;
+              distance = tMaxZ;
+              tMaxZ += deltaZ;
+              lastNormal = [0, 0, -stepZ];
+            }
+          } else {
+            if (tMaxY < tMaxZ) {
+              y += stepY;
+              distance = tMaxY;
+              tMaxY += deltaY;
+              lastNormal = [0, -stepY, 0];
+            } else {
+              z += stepZ;
+              distance = tMaxZ;
+              tMaxZ += deltaZ;
+              lastNormal = [0, 0, -stepZ];
+            }
+          }
+        }
+        return null;
+      }
+
+      const GRAVITY = -24;
+      const MOVE_SPEED = 5.4;
+
+      function updatePhysics(dt) {
+        const moveForward = (keyState['KeyW'] ? 1 : 0) - (keyState['KeyS'] ? 1 : 0) + moveInput.y;
+        const moveStrafe = (keyState['KeyD'] ? 1 : 0) - (keyState['KeyA'] ? 1 : 0) + moveInput.x;
+        let forward = moveForward;
+        let strafe = moveStrafe;
+        const length = Math.hypot(forward, strafe);
+        if (length > 1) {
+          forward /= length;
+          strafe /= length;
+        }
+        const sinYaw = Math.sin(player.yaw);
+        const cosYaw = Math.cos(player.yaw);
+        const moveX = cosYaw * forward + sinYaw * strafe;
+        const moveZ = sinYaw * forward - cosYaw * strafe;
+        player.velocity.x = moveX * MOVE_SPEED;
+        player.velocity.z = moveZ * MOVE_SPEED;
+
+        if (Math.abs(lookInput.x) > 0.01 || Math.abs(lookInput.y) > 0.01) {
+          const lookSpeed = 2.9;
+          player.yaw -= lookInput.x * lookSpeed * dt;
+          player.pitch -= lookInput.y * lookSpeed * dt;
+          clampPitch();
+        }
+
+        player.velocity.y += GRAVITY * dt;
+        if (player.velocity.y < -36) {
+          player.velocity.y = -36;
+        }
+
+        moveAndCollide(dt);
+      }
+
+      function moveAndCollide(dt) {
+        const epsilon = 0.001;
+        const half = player.radius;
+        const height = player.height;
+        player.onGround = false;
+
+        player.position.x += player.velocity.x * dt;
+        resolveAxis('x');
+
+        player.position.z += player.velocity.z * dt;
+        resolveAxis('z');
+
+        player.position.y += player.velocity.y * dt;
+        resolveAxis('y');
+
+        function resolveAxis(axis) {
+          const pos = player.position;
+          const vel = player.velocity;
+          const minY = Math.floor(pos.y);
+          const maxY = Math.floor(pos.y + height - epsilon);
+          const minX = Math.floor(pos.x - half);
+          const maxX = Math.floor(pos.x + half - epsilon);
+          const minZ = Math.floor(pos.z - half);
+          const maxZ = Math.floor(pos.z + half - epsilon);
+          if (axis === 'x') {
+            if (vel.x > 0) {
+              const x = Math.floor(pos.x + half);
+              for (let y = minY; y <= maxY; y++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                  if (getBlock(x, y, z) !== 0) {
+                    pos.x = x - half - epsilon;
+                    vel.x = 0;
+                    return;
+                  }
+                }
+              }
+            } else if (vel.x < 0) {
+              const x = Math.floor(pos.x - half);
+              for (let y = minY; y <= maxY; y++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                  if (getBlock(x, y, z) !== 0) {
+                    pos.x = x + 1 + half + epsilon;
+                    vel.x = 0;
+                    return;
+                  }
+                }
+              }
+            }
+          } else if (axis === 'z') {
+            if (vel.z > 0) {
+              const z = Math.floor(pos.z + half);
+              for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                  if (getBlock(x, y, z) !== 0) {
+                    pos.z = z - half - epsilon;
+                    vel.z = 0;
+                    return;
+                  }
+                }
+              }
+            } else if (vel.z < 0) {
+              const z = Math.floor(pos.z - half);
+              for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                  if (getBlock(x, y, z) !== 0) {
+                    pos.z = z + 1 + half + epsilon;
+                    vel.z = 0;
+                    return;
+                  }
+                }
+              }
+            }
+          } else if (axis === 'y') {
+            if (vel.y > 0) {
+              const y = Math.floor(pos.y + height);
+              for (let x = minX; x <= maxX; x++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                  if (getBlock(x, y, z) !== 0) {
+                    pos.y = y - height - epsilon;
+                    vel.y = 0;
+                    return;
+                  }
+                }
+              }
+            } else if (vel.y <= 0) {
+              const y = Math.floor(pos.y);
+              for (let x = minX; x <= maxX; x++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                  if (getBlock(x, y - 1, z) !== 0) {
+                    pos.y = y + epsilon;
+                    vel.y = 0;
+                    player.onGround = true;
+                    return;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      function updateViewMatrix() {
+        const eyeX = player.position.x;
+        const eyeY = player.position.y + player.eyeHeight;
+        const eyeZ = player.position.z;
+        const dir = getViewDirection();
+        const center = [eyeX + dir.x, eyeY + dir.y, eyeZ + dir.z];
+        mat4LookAt(viewMatrix, [eyeX, eyeY, eyeZ], center, [0, 1, 0]);
+        gl.uniformMatrix4fv(uniformLocation.view, false, viewMatrix);
+      }
+
+      function renderFrame() {
+        gl.clearColor(0.65, 0.82, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        gl.enable(gl.DEPTH_TEST);
+        gl.uniform3f(uniformLocation.lightDir, 0.4, 0.9, 0.6);
+        if (vertexCount > 0) {
+          gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+        }
+      }
+
+      const targetInfo = { name: '无', distance: 0 };
+      function updateTargetInfo() {
+        const hit = pickBlock(6);
+        if (hit && hit.block) {
+          targetInfo.name = BLOCK_INFO[hit.block].name;
+          targetInfo.distance = hit.distance;
+        } else {
+          targetInfo.name = '无';
+          targetInfo.distance = 0;
+        }
+        targetLabel.textContent = targetInfo.distance > 0 ? `${targetInfo.name} (${targetInfo.distance.toFixed(2)}m)` : targetInfo.name;
+      }
+
+      let lastTime = performance.now();
+      function loop(now) {
+        const dt = Math.min((now - lastTime) / 1000, 0.05);
+        lastTime = now;
+        updatePhysics(dt);
+        updateViewMatrix();
+        if (meshDirty) {
+          rebuildMesh();
+          meshDirty = false;
+        }
+        renderFrame();
+        updateTargetInfo();
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
