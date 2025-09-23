@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>像素方块世界</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ui-bg: rgba(17, 17, 17, 0.75);
+    --ui-border: rgba(255, 255, 255, 0.2);
+    --ui-text: #f0f0f0;
+    --accent: #3bbefb;
+    --hotbar-size: 52px;
+    font-family: "Segoe UI", sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  body {
+    margin: 0;
+    background: #070b17;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  canvas {
+    flex: 1 1 auto;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(#88c9ff, #cfe9ff 40%, #4f7bff 70%, #0b1028);
+    image-rendering: pixelated;
+    cursor: crosshair;
+  }
+
+  #ui-layer {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+
+  .top-ui, .bottom-ui {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px;
+    pointer-events: none;
+  }
+
+  .top-ui {
+    align-items: flex-start;
+  }
+
+  .panel {
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    border-radius: 12px;
+    padding: 10px 14px;
+    color: var(--ui-text);
+    pointer-events: auto;
+    backdrop-filter: blur(8px);
+  }
+
+  #info {
+    max-width: min(320px, 80vw);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  #clock {
+    min-width: 70px;
+    text-align: right;
+    font-weight: bold;
+    font-size: 13px;
+  }
+
+  #hotbar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: var(--hotbar-size);
+    gap: 8px;
+    align-items: center;
+  }
+
+  .slot {
+    width: var(--hotbar-size);
+    height: var(--hotbar-size);
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: rgba(12, 12, 12, 0.65);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    transition: border 0.2s, transform 0.2s;
+    color: var(--ui-text);
+    font-size: 12px;
+    text-align: center;
+    padding: 4px;
+    pointer-events: auto;
+  }
+
+  .slot.active {
+    border-color: var(--accent);
+    transform: translateY(-4px);
+  }
+
+  #controls {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(56px, 15vw));
+    grid-template-rows: repeat(2, minmax(56px, 15vw));
+    gap: 10px;
+    align-self: center;
+    pointer-events: auto;
+  }
+
+  .btn {
+    background: rgba(20, 20, 20, 0.72);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    color: var(--ui-text);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(16px, 2.5vw, 22px);
+    font-weight: 600;
+    transition: transform 0.1s, background 0.1s;
+    touch-action: manipulation;
+  }
+
+  .btn:active, .btn.active {
+    transform: scale(0.92);
+    background: rgba(80, 80, 80, 0.72);
+  }
+
+  .btn.small {
+    border-radius: 16px;
+    width: clamp(72px, 18vw, 120px);
+    height: clamp(44px, 14vw, 72px);
+    font-size: clamp(14px, 2vw, 18px);
+    justify-self: center;
+  }
+
+  #status-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    pointer-events: auto;
+  }
+
+  #hearts {
+    display: grid;
+    grid-auto-flow: column;
+    gap: 2px;
+  }
+
+  .heart {
+    width: 18px;
+    height: 16px;
+    background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 14"%3E%3Cpath fill="%23ff5c7a" d="M8 14s6-3.24 6-8a3.71 3.71 0 0 0-6-2.83A3.71 3.71 0 0 0 2 6c0 4.76 6 8 6 8z"/%3E%3C/svg%3E') center/contain no-repeat;
+  }
+
+  @media (max-width: 768px) {
+    :root {
+      --hotbar-size: 48px;
+    }
+
+    #info {
+      display: none;
+    }
+
+    #controls {
+      grid-template-columns: repeat(4, minmax(52px, 20vw));
+      grid-template-rows: repeat(2, minmax(52px, 20vw));
+    }
+
+    .top-ui {
+      padding: 8px;
+    }
+
+    .bottom-ui {
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+    }
+
+    #hotbar {
+      gap: 6px;
+    }
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui-layer">
+  <div class="top-ui">
+    <div id="info" class="panel">
+      <strong>像素方块世界</strong><br />
+      · 拖动画面瞄准，点击破坏/放置方块。<br />
+      · 左右移动，跳跃攀爬，采集资源。<br />
+      · 底部快捷栏可切换方块类型。<br />
+      · 在设备上体验简化版原版玩法。
+    </div>
+    <div id="clock" class="panel">黎明</div>
+  </div>
+  <div class="bottom-ui">
+    <div id="status-bar" class="panel">
+      <div id="hearts"></div>
+      <div id="hint">触摸画面开始冒险</div>
+    </div>
+    <div id="hotbar" class="panel"></div>
+    <div id="controls">
+      <button class="btn" data-control="left">◀</button>
+      <button class="btn" data-control="jump">⤴</button>
+      <button class="btn" data-control="right">▶</button>
+      <button class="btn" data-control="mine">⛏</button>
+      <button class="btn" data-control="sneak">⇓</button>
+      <button class="btn" data-control="interact">⬚</button>
+      <button class="btn" data-control="place" style="grid-column: span 2">▦</button>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const hotbarEl = document.getElementById('hotbar');
+  const clockEl = document.getElementById('clock');
+  const hintEl = document.getElementById('hint');
+  const heartsEl = document.getElementById('hearts');
+  const controls = document.querySelectorAll('#controls .btn');
+
+  const TILE_SIZE = 32;
+  const WORLD_WIDTH = 240;
+  const WORLD_HEIGHT = 140;
+  const SKY_HEIGHT = 80;
+  const CHUNK = 16;
+  const PLAYER_WIDTH = 0.7;
+  const PLAYER_HEIGHT = 1.8;
+  const DAY_LENGTH = 120000; // 2分钟一日
+
+  const BlockId = {
+    AIR: 0,
+    GRASS: 1,
+    DIRT: 2,
+    STONE: 3,
+    WOOD: 4,
+    LEAVES: 5,
+    PLANK: 6,
+    SAND: 7,
+    WATER: 8
+  };
+
+  const Blocks = {
+    [BlockId.AIR]: { name: '空气', solid: false, color: 'transparent' },
+    [BlockId.GRASS]: { name: '草方块', solid: true, color: '#3cb043', variant: ['#3cb043', '#35983b', '#43b84b'] },
+    [BlockId.DIRT]: { name: '泥土', solid: true, color: '#7f4f24', variant: ['#7f4f24', '#835029', '#734320'] },
+    [BlockId.STONE]: { name: '石头', solid: true, color: '#7f8c8d', variant: ['#7f8c8d', '#95a5a6', '#6d7879'] },
+    [BlockId.WOOD]: { name: '树干', solid: true, color: '#a9744d', bark: true },
+    [BlockId.LEAVES]: { name: '树叶', solid: false, color: 'rgba(62, 132, 47, 0.9)', variant: ['rgba(62, 132, 47, 0.9)', 'rgba(70, 150, 55, 0.88)'] },
+    [BlockId.PLANK]: { name: '木板', solid: true, color: '#d2b48c', variant: ['#d2b48c', '#c9a77f', '#d9bc95'] },
+    [BlockId.SAND]: { name: '沙子', solid: true, color: '#e7d7a7', variant: ['#e7d7a7', '#dccc97', '#f2e4b8'] },
+    [BlockId.WATER]: { name: '水', solid: false, color: 'rgba(74, 144, 226, 0.6)' }
+  };
+
+  const hotbar = [BlockId.DIRT, BlockId.STONE, BlockId.WOOD, BlockId.PLANK, BlockId.SAND];
+  let selectedIndex = 0;
+  let world = createArray(WORLD_WIDTH, WORLD_HEIGHT, BlockId.AIR);
+  let sunlight = 0;
+  let lastTime = performance.now();
+  let elapsedDay = Math.random() * DAY_LENGTH;
+
+  const player = {
+    x: WORLD_WIDTH / 2,
+    y: SKY_HEIGHT / 2,
+    vx: 0,
+    vy: 0,
+    onGround: false,
+    facing: 1,
+    health: 10,
+    target: { x: WORLD_WIDTH / 2, y: SKY_HEIGHT / 2 }
+  };
+
+  const inputs = {
+    left: false,
+    right: false,
+    jump: false,
+    sneak: false,
+    mine: false,
+    place: false,
+    interact: false
+  };
+
+  const miningState = {
+    active: false,
+    progress: 0,
+    target: null,
+    lastBlock: null
+  };
+
+  let camera = { x: player.x, y: player.y };
+
+  function createArray(w, h, value) {
+    const arr = new Array(w);
+    for (let x = 0; x < w; x++) {
+      arr[x] = new Array(h);
+      arr[x].fill(value);
+    }
+    return arr;
+  }
+
+  function seededRandom(seed) {
+    let value = seed % 2147483647;
+    if (value <= 0) value += 2147483646;
+    return () => {
+      value = (value * 16807) % 2147483647;
+      return (value - 1) / 2147483646;
+    };
+  }
+
+  function generateTerrain() {
+    const rng = seededRandom(Date.now() & 0xffffff);
+    const baseHeight = WORLD_HEIGHT * 0.58;
+    const seaLevel = Math.floor(WORLD_HEIGHT * 0.6);
+    const heights = [];
+    let current = baseHeight;
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      const drift = (rng() - 0.5) * 4;
+      const slope = (rng() - 0.5) * 2;
+      current = clamp(current + drift + slope, WORLD_HEIGHT * 0.35, WORLD_HEIGHT * 0.8);
+      heights.push(Math.floor(current));
+    }
+    const treeChance = 0.06;
+
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      const height = heights[x];
+      let surfaceBlock = BlockId.GRASS;
+      if (height >= seaLevel - 2 && height <= seaLevel + 3) {
+        surfaceBlock = BlockId.SAND;
+      }
+
+      for (let y = 0; y < WORLD_HEIGHT; y++) {
+        if (y < height) {
+          if (height > seaLevel && y >= seaLevel) {
+            world[x][y] = BlockId.WATER;
+          } else {
+            world[x][y] = BlockId.AIR;
+          }
+        } else if (y === height) {
+          world[x][y] = surfaceBlock;
+        } else if (y <= height + 3) {
+          world[x][y] = BlockId.DIRT;
+        } else if (y < WORLD_HEIGHT - 2) {
+          world[x][y] = BlockId.STONE;
+        } else {
+          world[x][y] = BlockId.STONE;
+        }
+      }
+
+      if (surfaceBlock === BlockId.GRASS && height > seaLevel + 2 && rng() < treeChance) {
+        growTree(x, height);
+      }
+    }
+  }
+
+  function growTree(x, groundY) {
+    const trunkHeight = 4 + Math.floor(Math.random() * 2);
+    for (let y = 1; y <= trunkHeight && groundY - y > 0; y++) {
+      setBlock(x, groundY - y, BlockId.WOOD);
+    }
+    const top = groundY - trunkHeight;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dy = -2; dy <= 2; dy++) {
+        if (Math.abs(dx) + Math.abs(dy) <= 3) {
+          setBlock(x + dx, top + dy, BlockId.LEAVES);
+        }
+      }
+    }
+  }
+
+  function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth * dpr;
+    const height = canvas.clientHeight * dpr;
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function getBlock(x, y) {
+    if (x < 0 || y < 0 || x >= WORLD_WIDTH || y >= WORLD_HEIGHT) return BlockId.AIR;
+    return world[x][y];
+  }
+
+  function setBlock(x, y, id) {
+    if (x < 0 || y < 0 || x >= WORLD_WIDTH || y >= WORLD_HEIGHT) return;
+    world[x][y] = id;
+  }
+
+  function blockRect(x, y) {
+    return {
+      left: x,
+      right: x + 1,
+      top: y,
+      bottom: y + 1
+    };
+  }
+
+  function rectIntersect(a, b) {
+    return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+  }
+
+  function playerRect(px = player.x, py = player.y) {
+    return {
+      left: px - PLAYER_WIDTH / 2,
+      right: px + PLAYER_WIDTH / 2,
+      top: py - PLAYER_HEIGHT,
+      bottom: py
+    };
+  }
+
+  function movePlayer(dt) {
+    const accel = 16;
+    const maxSpeed = inputs.sneak ? 3 : 6;
+    const friction = player.onGround ? 12 : 2;
+    const gravity = 25;
+    const jumpSpeed = 9;
+
+    if (inputs.left && !inputs.right) {
+      player.vx -= accel * dt;
+      player.facing = -1;
+    } else if (inputs.right && !inputs.left) {
+      player.vx += accel * dt;
+      player.facing = 1;
+    } else {
+      if (player.vx > 0) player.vx = Math.max(0, player.vx - friction * dt);
+      if (player.vx < 0) player.vx = Math.min(0, player.vx + friction * dt);
+    }
+
+    player.vx = clamp(player.vx, -maxSpeed, maxSpeed);
+
+    player.vy += gravity * dt;
+    if (inputs.jump && player.onGround) {
+      player.vy = -jumpSpeed;
+      player.onGround = false;
+    }
+
+    let nextX = player.x + player.vx * dt;
+    let rect = playerRect(nextX, player.y);
+    const collisionsX = collide(rect);
+    if (collisionsX.length) {
+      if (player.vx > 0) {
+        nextX = Math.min(...collisionsX.map(block => block.left)) - PLAYER_WIDTH / 2;
+      } else if (player.vx < 0) {
+        nextX = Math.max(...collisionsX.map(block => block.right)) + PLAYER_WIDTH / 2;
+      }
+      player.vx = 0;
+    }
+    player.x = nextX;
+
+    let nextY = player.y + player.vy * dt;
+    rect = playerRect(player.x, nextY);
+    const collisionsY = collide(rect);
+    player.onGround = false;
+    if (collisionsY.length) {
+      if (player.vy > 0) {
+        nextY = Math.min(...collisionsY.map(block => block.top));
+        player.onGround = true;
+      } else if (player.vy < 0) {
+        nextY = Math.max(...collisionsY.map(block => block.bottom));
+      }
+      player.vy = 0;
+    }
+    player.y = nextY;
+  }
+
+  function collide(rect) {
+    const minX = Math.floor(rect.left);
+    const maxX = Math.floor(rect.right);
+    const minY = Math.floor(rect.top);
+    const maxY = Math.floor(rect.bottom);
+    const collisions = [];
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        const id = getBlock(x, y);
+        if (id !== BlockId.AIR && Blocks[id].solid) {
+          const block = blockRect(x, y);
+          if (rectIntersect(rect, block)) {
+            collisions.push(block);
+          }
+        }
+      }
+    }
+    return collisions;
+  }
+
+  function updateCamera(dt) {
+    const lerpFactor = 1 - Math.pow(0.001, dt);
+    camera.x += (player.x - camera.x) * lerpFactor;
+    camera.y += (player.y - camera.y) * lerpFactor;
+    camera.x = clamp(camera.x, canvas.width / (TILE_SIZE * 2), WORLD_WIDTH - canvas.width / (TILE_SIZE * 2));
+    camera.y = clamp(camera.y, canvas.height / (TILE_SIZE * 2), WORLD_HEIGHT - canvas.height / (TILE_SIZE * 2));
+  }
+
+  function worldToScreen(wx, wy) {
+    const dpr = window.devicePixelRatio || 1;
+    const screenX = (wx - camera.x) * TILE_SIZE + canvas.width / 2;
+    const screenY = (wy - camera.y) * TILE_SIZE + canvas.height / 2;
+    return { x: screenX, y: screenY, dpr };
+  }
+
+  function screenToWorld(sx, sy) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (sx - rect.left) / rect.width * canvas.width;
+    const y = (sy - rect.top) / rect.height * canvas.height;
+    const wx = (x - canvas.width / 2) / TILE_SIZE + camera.x;
+    const wy = (y - canvas.height / 2) / TILE_SIZE + camera.y;
+    return { x: wx, y: wy };
+  }
+
+  function drawBlock(x, y, id) {
+    const block = Blocks[id];
+    if (!block || id === BlockId.AIR) return;
+    const { x: screenX, y: screenY } = worldToScreen(x + 0.5, y + 0.5);
+    const size = TILE_SIZE;
+    const half = size / 2;
+    let color = block.color;
+    if (block.variant) {
+      const index = Math.abs((x * 73856093 ^ y * 19349663) % block.variant.length);
+      color = block.variant[index];
+    }
+
+    ctx.fillStyle = color;
+    ctx.fillRect(screenX - half, screenY - half, size, size);
+
+    if (block.bark) {
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      ctx.fillRect(screenX - half + size * 0.2, screenY - half, size * 0.12, size);
+      ctx.fillRect(screenX + half - size * 0.32, screenY - half, size * 0.12, size);
+    }
+
+    if (id === BlockId.WATER) {
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(screenX - half, screenY - half, size, size * 0.2);
+    }
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(screenX - half + 0.5, screenY - half + 0.5, size - 1, size - 1);
+  }
+
+  function drawPlayer() {
+    const rect = playerRect();
+    const { x: screenX, y: screenY } = worldToScreen(rect.left + PLAYER_WIDTH / 2, rect.top + PLAYER_HEIGHT / 2);
+    const width = PLAYER_WIDTH * TILE_SIZE;
+    const height = PLAYER_HEIGHT * TILE_SIZE;
+
+    ctx.fillStyle = '#2e86de';
+    ctx.fillRect(screenX - width / 2, screenY - height / 2, width, height);
+    ctx.fillStyle = '#f7c59f';
+    ctx.fillRect(screenX - width / 2, screenY - height / 2, width, height * 0.22);
+    ctx.fillStyle = '#1e3799';
+    ctx.fillRect(screenX - width / 2, screenY - height / 2 + height * 0.5, width, height * 0.5);
+
+    const eyeOffset = player.facing > 0 ? width * 0.15 : -width * 0.15;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(screenX + eyeOffset - width * 0.08, screenY - height / 2 + height * 0.08, width * 0.12, height * 0.12);
+  }
+
+  function drawTarget() {
+    const target = getTargetedBlock();
+    if (!target) return;
+    const { x: screenX, y: screenY } = worldToScreen(target.x + 0.5, target.y + 0.5);
+    const size = TILE_SIZE;
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(screenX - size / 2, screenY - size / 2, size, size);
+  }
+
+  function drawBackground() {
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    const sky = daySkyColor();
+    gradient.addColorStop(0, sky.top);
+    gradient.addColorStop(1, sky.bottom);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function drawWorld() {
+    const dpr = window.devicePixelRatio || 1;
+    const visibleWidth = canvas.width / TILE_SIZE;
+    const visibleHeight = canvas.height / TILE_SIZE;
+
+    const startX = Math.floor(camera.x - visibleWidth / 2) - 2;
+    const endX = Math.ceil(camera.x + visibleWidth / 2) + 2;
+    const startY = Math.floor(camera.y - visibleHeight / 2) - 2;
+    const endY = Math.ceil(camera.y + visibleHeight / 2) + 2;
+
+    for (let x = startX; x <= endX; x++) {
+      for (let y = startY; y <= endY; y++) {
+        drawBlock(x, y, getBlock(x, y));
+      }
+    }
+  }
+
+  function daySkyColor() {
+    const t = (elapsedDay % DAY_LENGTH) / DAY_LENGTH;
+    const daylight = Math.cos((t - 0.25) * Math.PI * 2) * 0.5 + 0.5;
+    sunlight = clamp(daylight, 0.1, 1);
+    clockEl.textContent = t < 0.2 ? '黎明' : t < 0.45 ? '白昼' : t < 0.7 ? '黄昏' : '夜晚';
+    const dayTop = '#8ecdf7';
+    const dayBottom = '#59a7f0';
+    const nightTop = '#050b1d';
+    const nightBottom = '#0c1233';
+    const blend = (a, b) => {
+      const ah = parseInt(a.slice(1), 16);
+      const bh = parseInt(b.slice(1), 16);
+      const ar = (ah >> 16) & 0xff;
+      const ag = (ah >> 8) & 0xff;
+      const ab = ah & 0xff;
+      const br = (bh >> 16) & 0xff;
+      const bg = (bh >> 8) & 0xff;
+      const bb = bh & 0xff;
+      const r = Math.round(ar * sunlight + br * (1 - sunlight));
+      const g = Math.round(ag * sunlight + bg * (1 - sunlight));
+      const bch = Math.round(ab * sunlight + bb * (1 - sunlight));
+      return `rgb(${r}, ${g}, ${bch})`;
+    };
+    return {
+      top: blend(dayTop, nightTop),
+      bottom: blend(dayBottom, nightBottom)
+    };
+  }
+
+  function getTargetedBlock() {
+    const aim = player.target;
+    const dx = aim.x - player.x;
+    const dy = aim.y - (player.y - PLAYER_HEIGHT / 2);
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const maxDistance = 5;
+    const step = 0.2;
+    if (distance < 0.001) {
+      return null;
+    }
+    if (distance > maxDistance) {
+      const scale = maxDistance / distance;
+      aim.x = player.x + dx * scale;
+      aim.y = player.y - PLAYER_HEIGHT / 2 + dy * scale;
+    }
+    for (let i = 0; i < maxDistance / step; i++) {
+      const px = player.x + dx * (i * step) / distance;
+      const py = player.y - PLAYER_HEIGHT / 2 + dy * (i * step) / distance;
+      const bx = Math.floor(px);
+      const by = Math.floor(py);
+      const id = getBlock(bx, by);
+      if (id !== BlockId.AIR && id !== BlockId.WATER) {
+        return { x: bx, y: by, id };
+      }
+    }
+    const bx = Math.floor(aim.x);
+    const by = Math.floor(aim.y);
+    return { x: bx, y: by, id: getBlock(bx, by) };
+  }
+
+  function miningTick(dt) {
+    if (!inputs.mine) {
+      miningState.active = false;
+      miningState.progress = 0;
+      miningState.lastBlock = null;
+      return;
+    }
+    const target = getTargetedBlock();
+    if (!target || target.id === BlockId.AIR || target.id === BlockId.WATER) {
+      miningState.active = false;
+      miningState.progress = 0;
+      miningState.lastBlock = null;
+      return;
+    }
+    if (!Blocks[target.id].solid) return;
+    if (!miningState.active || !miningState.lastBlock || target.x !== miningState.lastBlock.x || target.y !== miningState.lastBlock.y) {
+      miningState.active = true;
+      miningState.progress = 0;
+      miningState.lastBlock = target;
+    }
+    miningState.progress += dt;
+    if (miningState.progress >= 0.35) {
+      setBlock(target.x, target.y, BlockId.AIR);
+      miningState.progress = 0;
+      miningState.active = false;
+      hintEl.textContent = `采集到 ${Blocks[target.id].name}`;
+    }
+  }
+
+  function placeBlock() {
+    const target = getTargetedBlock();
+    if (!target) return;
+    let placePos = target;
+    if (target.id !== BlockId.AIR && target.id !== BlockId.WATER) {
+      const dirX = player.target.x - (target.x + 0.5);
+      const dirY = player.target.y - (target.y + 0.5);
+      if (Math.abs(dirX) > Math.abs(dirY)) {
+        placePos = { x: target.x + (dirX > 0 ? 1 : -1), y: target.y };
+      } else {
+        placePos = { x: target.x, y: target.y + (dirY > 0 ? 1 : -1) };
+      }
+    }
+    const id = getBlock(placePos.x, placePos.y);
+    if (id !== BlockId.AIR && id !== BlockId.WATER) return;
+    const rect = blockRect(placePos.x, placePos.y);
+    if (rectIntersect(rect, playerRect())) return;
+    const blockId = hotbar[selectedIndex];
+    setBlock(placePos.x, placePos.y, blockId);
+    hintEl.textContent = `放置 ${Blocks[blockId].name}`;
+  }
+
+  function updateHearts() {
+    heartsEl.innerHTML = '';
+    for (let i = 0; i < player.health; i++) {
+      const heart = document.createElement('div');
+      heart.className = 'heart';
+      heartsEl.appendChild(heart);
+    }
+  }
+
+  function render(dt) {
+    resizeCanvas();
+    drawBackground();
+    drawWorld();
+    applyLighting();
+    drawPlayer();
+    drawTarget();
+    drawCrosshair();
+  }
+
+  function applyLighting() {
+    const darkness = clamp(1 - sunlight, 0, 0.7);
+    if (darkness < 0.02) return;
+    ctx.fillStyle = `rgba(0, 0, 0, ${darkness})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  function drawCrosshair() {
+    const { x: sx, y: sy } = worldToScreen(player.target.x, player.target.y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 2;
+    const size = 10;
+    ctx.beginPath();
+    ctx.moveTo(sx - size, sy);
+    ctx.lineTo(sx + size, sy);
+    ctx.moveTo(sx, sy - size);
+    ctx.lineTo(sx, sy + size);
+    ctx.stroke();
+  }
+
+  function gameLoop(now) {
+    const deltaMs = now - lastTime;
+    const dt = Math.min(deltaMs / 1000, 0.05);
+    elapsedDay += deltaMs;
+    lastTime = now;
+
+    movePlayer(dt);
+    updateCamera(dt);
+    miningTick(dt);
+    if (inputs.place) {
+      placeBlock();
+      inputs.place = false;
+    }
+
+    render(dt);
+    requestAnimationFrame(gameLoop);
+  }
+
+  function setupHotbar() {
+    hotbarEl.innerHTML = '';
+    hotbar.forEach((blockId, index) => {
+      const slot = document.createElement('button');
+      slot.className = 'slot';
+      slot.innerHTML = `<div style="width:26px;height:26px;margin-bottom:4px;background:${Blocks[blockId].color};border-radius:6px;box-shadow:0 0 0 1px rgba(255,255,255,0.15);"></div><span>${Blocks[blockId].name}</span>`;
+      slot.addEventListener('click', () => {
+        selectedIndex = index;
+        updateHotbarSelection();
+      });
+      hotbarEl.appendChild(slot);
+    });
+    updateHotbarSelection();
+  }
+
+  function updateHotbarSelection() {
+    [...hotbarEl.children].forEach((child, index) => {
+      child.classList.toggle('active', index === selectedIndex);
+    });
+  }
+
+  function setupControls() {
+    const keyMap = {
+      KeyA: 'left',
+      ArrowLeft: 'left',
+      KeyD: 'right',
+      ArrowRight: 'right',
+      KeyW: 'jump',
+      ArrowUp: 'jump',
+      Space: 'jump',
+      KeyS: 'sneak',
+      ArrowDown: 'sneak',
+      ShiftLeft: 'sneak',
+      KeyF: 'place',
+      KeyE: 'interact',
+      KeyQ: 'mine',
+      KeyR: 'mine'
+    };
+
+    window.addEventListener('keydown', (e) => {
+      const action = keyMap[e.code];
+      if (action) {
+        inputs[action] = true;
+        e.preventDefault();
+      }
+      if (e.code === 'Digit1') { selectedIndex = 0; updateHotbarSelection(); }
+      if (e.code === 'Digit2') { selectedIndex = 1; updateHotbarSelection(); }
+      if (e.code === 'Digit3') { selectedIndex = 2; updateHotbarSelection(); }
+      if (e.code === 'Digit4') { selectedIndex = 3; updateHotbarSelection(); }
+      if (e.code === 'Digit5') { selectedIndex = 4; updateHotbarSelection(); }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const action = keyMap[e.code];
+      if (action) {
+        inputs[action] = false;
+        e.preventDefault();
+      }
+    });
+
+    controls.forEach(btn => {
+      const control = btn.dataset.control;
+      const setState = (state) => {
+        if (control === 'mine') inputs.mine = state;
+        else if (control === 'place' && state) inputs.place = true;
+        else if (control === 'interact') inputs.interact = state;
+        else inputs[control] = state;
+        btn.classList.toggle('active', state);
+      };
+      const pointerDown = (e) => {
+        e.preventDefault();
+        setState(true);
+      };
+      const pointerUp = (e) => {
+        e.preventDefault();
+        setState(false);
+      };
+      btn.addEventListener('pointerdown', pointerDown);
+      btn.addEventListener('pointerup', pointerUp);
+      btn.addEventListener('pointerleave', pointerUp);
+      btn.addEventListener('pointercancel', pointerUp);
+    });
+
+    const handlePointerDown = (e) => {
+      updateTargetFromPointer(e);
+      if (e.pointerType !== 'touch') {
+        if (e.button === 0) {
+          inputs.mine = true;
+        }
+        if (e.button === 2) {
+          inputs.place = true;
+        }
+      }
+    };
+
+    const handlePointerUp = (e) => {
+      if (e.pointerType !== 'touch') {
+        if (e.button === 0) {
+          inputs.mine = false;
+        }
+      }
+    };
+
+    canvas.addEventListener('pointerdown', handlePointerDown, { passive: false });
+    canvas.addEventListener('pointermove', updateTargetFromPointer, { passive: false });
+    canvas.addEventListener('pointerup', handlePointerUp);
+    canvas.addEventListener('pointerleave', () => { inputs.mine = false; });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  function updateTargetFromPointer(e) {
+    e.preventDefault();
+    const touch = e.touches ? e.touches[0] : e;
+    const { x, y } = screenToWorld(touch.clientX, touch.clientY);
+    player.target.x = x;
+    player.target.y = y;
+    hintEl.textContent = '瞄准点更新';
+  }
+
+  function init() {
+    updateHearts();
+    setupHotbar();
+    setupControls();
+    generateTerrain();
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
