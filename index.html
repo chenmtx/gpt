@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>精品天气卡片</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap');
+
+    :root {
+      color-scheme: dark;
+      --bg-dark: #040b1f;
+      --card-bg: rgba(16, 23, 46, 0.75);
+      --card-border: rgba(123, 185, 255, 0.18);
+      --accent-primary: #5ad4ff;
+      --accent-secondary: #ffc857;
+      --accent-tertiary: #c792ea;
+      --accent-success: #7be495;
+      --text-strong: #f6f9ff;
+      --text-subtle: rgba(245, 248, 255, 0.68);
+      --blur-radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Montserrat', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(39, 64, 140, 0.35), transparent 45%),
+        radial-gradient(circle at 80% 0%, rgba(106, 51, 147, 0.35), transparent 50%),
+        var(--bg-dark);
+      color: var(--text-strong);
+      padding: 60px 30px;
+      overflow-x: hidden;
+    }
+
+    .app-shell {
+      width: min(1200px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 4vw, 3rem);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin: 0;
+      text-transform: uppercase;
+    }
+
+    p.subtitle {
+      margin: 0;
+      font-size: 1rem;
+      color: var(--text-subtle);
+      letter-spacing: 0.04em;
+    }
+
+    .weather-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 28px;
+    }
+
+    .weather-card {
+      position: relative;
+      padding: 28px;
+      border-radius: 28px;
+      background: linear-gradient(135deg, rgba(26, 38, 77, 0.7), rgba(20, 29, 62, 0.85));
+      border: 1px solid var(--card-border);
+      box-shadow: 0 20px 45px rgba(5, 9, 24, 0.55);
+      overflow: hidden;
+      backdrop-filter: blur(var(--blur-radius));
+      isolation: isolate;
+      transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .weather-card:hover {
+      transform: translateY(-10px) scale(1.02);
+      box-shadow: 0 28px 55px rgba(13, 21, 45, 0.75);
+    }
+
+    .weather-card::before {
+      content: '';
+      position: absolute;
+      inset: -40% -30% auto auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 65%);
+      transform: translate3d(0, 0, 0);
+      filter: blur(0px);
+      z-index: -1;
+      opacity: 0.75;
+      animation: shimmer 12s linear infinite;
+    }
+
+    @keyframes shimmer {
+      0% {
+        transform: translate3d(0%, 0%, 0) scale(1.1);
+        opacity: 0.2;
+      }
+      50% {
+        transform: translate3d(-12%, 16%, 0) scale(1.25);
+        opacity: 0.4;
+      }
+      100% {
+        transform: translate3d(0%, 0%, 0) scale(1.1);
+        opacity: 0.2;
+      }
+    }
+
+    .weather-card h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      letter-spacing: 0.04em;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .badge {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: linear-gradient(135deg, rgba(141, 188, 255, 0.35), rgba(65, 121, 252, 0.25));
+      color: var(--accent-primary);
+      border: 1px solid rgba(72, 134, 255, 0.4);
+      backdrop-filter: blur(12px);
+    }
+
+    .temperature {
+      font-size: clamp(2.5rem, 5vw, 3.6rem);
+      font-weight: 700;
+      margin: 16px 0 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .temperature span.unit {
+      font-size: 1rem;
+      color: var(--text-subtle);
+      letter-spacing: 0.05em;
+    }
+
+    .meta {
+      font-size: 0.9rem;
+      color: var(--text-subtle);
+      letter-spacing: 0.04em;
+    }
+
+    .icon {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      margin: 22px auto 30px;
+      display: grid;
+      place-items: center;
+    }
+
+    /* Wind card */
+    .wind-icon {
+      --gust-color: rgba(90, 212, 255, 0.85);
+      --gust-glow: rgba(90, 212, 255, 0.35);
+    }
+
+    .wind-icon .gust {
+      position: absolute;
+      width: 80px;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent 0%, var(--gust-color) 40%, rgba(90, 212, 255, 0.05) 100%);
+      filter: drop-shadow(0 0 6px var(--gust-glow));
+      animation: gust 4.6s ease-in-out infinite;
+    }
+
+    .wind-icon .gust-1 { top: 20px; animation-delay: -0.5s; }
+    .wind-icon .gust-2 { top: 50px; animation-duration: 5.2s; animation-delay: -1.4s; }
+    .wind-icon .gust-3 { top: 80px; animation-duration: 6s; animation-delay: -2.4s; }
+
+    @keyframes gust {
+      0%, 100% { transform: translateX(-36px) scaleX(0.8); opacity: 0; }
+      20% { opacity: 1; }
+      50% { transform: translateX(24px) scaleX(1); opacity: 0.9; }
+      75% { opacity: 0.6; }
+    }
+
+    .wind-icon .leaf {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50% 10% 50% 50%;
+      background: var(--accent-success);
+      top: 35px;
+      left: 35px;
+      filter: drop-shadow(0 0 8px rgba(123, 228, 149, 0.5));
+      animation: leaf-swing 5s ease-in-out infinite;
+    }
+
+    @keyframes leaf-swing {
+      0% { transform: translate(-50px, -10px) rotate(-30deg); opacity: 0; }
+      25% { opacity: 1; }
+      50% { transform: translate(25px, 10px) rotate(18deg); }
+      100% { transform: translate(60px, -6px) rotate(45deg); opacity: 0; }
+    }
+
+    /* Rain card */
+    .rain-icon .cloud,
+    .snow-icon .cloud {
+      position: absolute;
+      width: 110px;
+      height: 60px;
+      background: linear-gradient(135deg, rgba(170, 190, 255, 0.85), rgba(138, 164, 255, 0.35));
+      border-radius: 50px;
+      filter: drop-shadow(0 12px 20px rgba(40, 61, 120, 0.45));
+    }
+
+    .rain-icon .cloud::before,
+    .rain-icon .cloud::after,
+    .snow-icon .cloud::before,
+    .snow-icon .cloud::after {
+      content: '';
+      position: absolute;
+      background: inherit;
+      width: 65px;
+      height: 65px;
+      border-radius: 50%;
+      top: -22px;
+    }
+
+    .rain-icon .cloud::before,
+    .snow-icon .cloud::before { left: 5px; }
+    .rain-icon .cloud::after,
+    .snow-icon .cloud::after { right: 5px; }
+
+    .rain-icon .drop {
+      position: absolute;
+      top: 50px;
+      width: 8px;
+      height: 22px;
+      border-radius: 50px;
+      background: linear-gradient(180deg, rgba(142, 199, 255, 0.9), rgba(90, 212, 255, 0.1));
+      animation: rainfall 1.6s linear infinite;
+    }
+
+    .rain-icon .drop::after {
+      content: '';
+      position: absolute;
+      inset: 2px 1px;
+      background: rgba(250, 250, 255, 0.55);
+      border-radius: 50px;
+      opacity: 0.8;
+    }
+
+    .rain-icon .drop:nth-child(2) { left: 18px; animation-delay: -0.3s; }
+    .rain-icon .drop:nth-child(3) { left: 42px; animation-delay: -0.6s; }
+    .rain-icon .drop:nth-child(4) { left: 66px; animation-delay: -0.9s; }
+    .rain-icon .drop:nth-child(5) { left: 90px; animation-delay: -1.2s; }
+
+    @keyframes rainfall {
+      0% { transform: translateY(0) scaleY(1); opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { transform: translateY(38px) scaleY(0.8); opacity: 0; }
+    }
+
+    .rain-icon .mist {
+      position: absolute;
+      bottom: 5px;
+      width: 120px;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(125, 167, 240, 0.22);
+      filter: blur(8px);
+      animation: mist 6s ease-in-out infinite;
+    }
+
+    @keyframes mist {
+      0%, 100% { transform: scaleX(0.85); opacity: 0.4; }
+      50% { transform: scaleX(1.1); opacity: 0.7; }
+    }
+
+    /* Sunny card */
+    .sun-icon {
+      --sun-core: radial-gradient(circle at 30% 30%, #fffbe6, #ffd460 60%, #ffae34 100%);
+      --sun-rays: conic-gradient(from 0deg, rgba(255, 220, 140, 0.9), rgba(255, 184, 67, 0.2), rgba(255, 220, 140, 0.9));
+    }
+
+    .sun-icon .sun-core {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background: var(--sun-core);
+      box-shadow: 0 0 35px rgba(255, 200, 100, 0.9);
+      animation: sunpulse 6s ease-in-out infinite;
+    }
+
+    .sun-icon .sun-rays {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      mask: radial-gradient(circle, transparent 40%, black 41%);
+      background: var(--sun-rays);
+      animation: sunrotate 14s linear infinite;
+      opacity: 0.95;
+    }
+
+    .sun-icon .orbital {
+      position: absolute;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 219, 146, 0.28);
+      animation: orbit 16s ease-in-out infinite;
+    }
+
+    .sun-icon .orbital::before,
+    .sun-icon .orbital::after {
+      content: '';
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 219, 146, 0.9);
+      top: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      box-shadow: 0 0 8px rgba(255, 220, 150, 0.7);
+    }
+
+    .sun-icon .orbital::after {
+      top: auto;
+      bottom: -5px;
+      background: rgba(255, 187, 92, 0.85);
+    }
+
+    @keyframes sunpulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+
+    @keyframes sunrotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes orbit {
+      0%, 100% { transform: scale(0.92); opacity: 0.6; }
+      50% { transform: scale(1.02); opacity: 1; }
+    }
+
+    /* Snow card */
+    .snow-icon .flake {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: rgba(245, 252, 255, 0.9);
+      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+      animation: snowfall 4.8s linear infinite;
+    }
+
+    .snow-icon .flake::before,
+    .snow-icon .flake::after {
+      content: '';
+      position: absolute;
+      inset: -8px 4px;
+      border-radius: 999px;
+      background: rgba(245, 252, 255, 0.55);
+      transform: rotate(45deg);
+    }
+
+    .snow-icon .flake::after {
+      inset: 4px -8px;
+      transform: rotate(45deg);
+    }
+
+    .snow-icon .flake:nth-of-type(2) { left: 20px; animation-delay: -1.5s; }
+    .snow-icon .flake:nth-of-type(3) { left: 60px; animation-delay: -2.8s; }
+    .snow-icon .flake:nth-of-type(4) { left: 90px; animation-delay: -4s; }
+    .snow-icon .flake:nth-of-type(5) { left: 45px; animation-delay: -3.2s; }
+
+    @keyframes snowfall {
+      0% { transform: translate3d(0, -18px, 0) rotate(0deg); opacity: 0; }
+      15% { opacity: 1; }
+      50% { transform: translate3d(-6px, 40px, 0) rotate(60deg); opacity: 0.9; }
+      100% { transform: translate3d(10px, 78px, 0) rotate(120deg); opacity: 0; }
+    }
+
+    .snow-icon .halo {
+      position: absolute;
+      width: 130px;
+      height: 130px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(216, 235, 255, 0.45), transparent 60%);
+      filter: blur(12px);
+      opacity: 0.5;
+      animation: halo 8s ease-in-out infinite;
+    }
+
+    @keyframes halo {
+      0%, 100% { transform: scale(0.9); opacity: 0.4; }
+      50% { transform: scale(1.1); opacity: 0.7; }
+    }
+
+    /* Card Accents */
+    .weather-card.wind::after {
+      content: '';
+      position: absolute;
+      inset: auto -40% -40% auto;
+      width: 240px;
+      height: 240px;
+      background: radial-gradient(circle, rgba(90, 212, 255, 0.28), transparent 70%);
+      z-index: -2;
+    }
+
+    .weather-card.rain::after {
+      content: '';
+      position: absolute;
+      inset: auto -50% -30% auto;
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle, rgba(110, 169, 255, 0.28), transparent 70%);
+      z-index: -2;
+    }
+
+    .weather-card.sunny::after {
+      content: '';
+      position: absolute;
+      inset: -60% auto auto -40%;
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(255, 196, 90, 0.28), transparent 70%);
+      z-index: -2;
+    }
+
+    .weather-card.snow::after {
+      content: '';
+      position: absolute;
+      inset: auto auto -50% -35%;
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(187, 214, 255, 0.25), transparent 72%);
+      z-index: -2;
+    }
+
+    .metrics {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 26px;
+      font-size: 0.8rem;
+      letter-spacing: 0.06em;
+      color: var(--text-subtle);
+    }
+
+    .metrics span strong {
+      display: block;
+      font-size: 1.1rem;
+      color: var(--text-strong);
+      letter-spacing: 0.04em;
+    }
+
+    footer {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.25);
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 40px 18px;
+      }
+      .weather-card {
+        padding: 24px;
+      }
+      .metrics {
+        flex-direction: column;
+        gap: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header>
+      <h1>Midnight Weather Studio</h1>
+      <p class="subtitle">实时天气场景 · 丝滑动效 · Apple 级别体验</p>
+    </header>
+
+    <section class="weather-grid">
+      <article class="weather-card wind">
+        <h2>
+          强劲风力
+          <span class="badge">阵风预警</span>
+        </h2>
+        <div class="temperature" data-animate-to="18">
+          <span class="value">0</span>
+          <span class="unit">°C</span>
+        </div>
+        <p class="meta">夜间大风来袭，户外请注意防风，妥善固定轻质物品。</p>
+        <div class="icon wind-icon">
+          <span class="gust gust-1"></span>
+          <span class="gust gust-2"></span>
+          <span class="gust gust-3"></span>
+          <span class="leaf"></span>
+        </div>
+        <div class="metrics">
+          <span>阵风速率<strong data-animate-to="56">0</strong>km/h</span>
+          <span>风向<strong>西北偏北</strong></span>
+          <span>体感温度<strong data-animate-to="14">0</strong>°C</span>
+        </div>
+      </article>
+
+      <article class="weather-card rain">
+        <h2>
+          夜间降雨
+          <span class="badge">雨量增强</span>
+        </h2>
+        <div class="temperature" data-animate-to="22">
+          <span class="value">0</span>
+          <span class="unit">°C</span>
+        </div>
+        <p class="meta">深蓝色雨幕缓缓倾泻，外出请随身携带雨具，注意路面湿滑。</p>
+        <div class="icon rain-icon">
+          <div class="cloud"></div>
+          <span class="drop"></span>
+          <span class="drop"></span>
+          <span class="drop"></span>
+          <span class="drop"></span>
+          <span class="drop"></span>
+          <div class="mist"></div>
+        </div>
+        <div class="metrics">
+          <span>降雨概率<strong data-animate-to="96">0</strong>%</span>
+          <span>湿度<strong data-animate-to="88">0</strong>%</span>
+          <span>紫外线<strong>弱</strong></span>
+        </div>
+      </article>
+
+      <article class="weather-card sunny">
+        <h2>
+          晴空万里
+          <span class="badge">黄金时刻</span>
+        </h2>
+        <div class="temperature" data-animate-to="29">
+          <span class="value">0</span>
+          <span class="unit">°C</span>
+        </div>
+        <p class="meta">清晨阳光倾洒，适合晨练与户外拍摄，注意及时补水防晒。</p>
+        <div class="icon sun-icon">
+          <div class="sun-rays"></div>
+          <div class="sun-core"></div>
+          <div class="orbital"></div>
+        </div>
+        <div class="metrics">
+          <span>紫外线指数<strong data-animate-to="7">0</strong></span>
+          <span>日照时长<strong data-animate-to="12">0</strong>h</span>
+          <span>空气质量<strong>优</strong></span>
+        </div>
+      </article>
+
+      <article class="weather-card snow">
+        <h2>
+          浪漫飘雪
+          <span class="badge">寒潮提醒</span>
+        </h2>
+        <div class="temperature" data-animate-to="-5">
+          <span class="value">0</span>
+          <span class="unit">°C</span>
+        </div>
+        <p class="meta">轻盈雪花漫舞天空，出行请注意防滑保暖，谨慎驾驶。</p>
+        <div class="icon snow-icon">
+          <div class="halo"></div>
+          <div class="cloud"></div>
+          <span class="flake"></span>
+          <span class="flake"></span>
+          <span class="flake"></span>
+          <span class="flake"></span>
+          <span class="flake"></span>
+        </div>
+        <div class="metrics">
+          <span>积雪深度<strong data-animate-to="12">0</strong>cm</span>
+          <span>湿度<strong data-animate-to="75">0</strong>%</span>
+          <span>能见度<strong>低</strong></span>
+        </div>
+      </article>
+    </section>
+
+    <footer>Designed for a 2000¥ / month pro weather experience</footer>
+  </div>
+
+  <script>
+    const counters = document.querySelectorAll('[data-animate-to]');
+
+    const animateValue = (element, toValue) => {
+      const isNegative = Number(toValue) < 0;
+      const duration = 1200;
+      const start = performance.now();
+      const fromValue = isNegative ? -2 : 0;
+
+      const step = (timestamp) => {
+        const progress = Math.min((timestamp - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = fromValue + (toValue - fromValue) * eased;
+        element.textContent = Math.round(current);
+        if (progress < 1) requestAnimationFrame(step);
+      };
+
+      requestAnimationFrame(step);
+    };
+
+    const revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const target = entry.target;
+            const toValue = Number(target.dataset.animateTo);
+            const display = target.querySelector('.value') || target;
+            animateValue(display, toValue);
+            revealObserver.unobserve(target);
+          }
+        });
+      },
+      { threshold: 0.4 }
+    );
+
+    counters.forEach((el) => revealObserver.observe(el));
+  </script>
+</body>
+</html>
