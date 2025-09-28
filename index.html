@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3x3 魔方模拟器</title>
+  <style>
+    :root {
+      --cubie-size: 60px;
+      --gap: 4px;
+      --step: calc(var(--cubie-size) + var(--gap));
+      --cube-size: calc(var(--cubie-size) * 3 + var(--gap) * 2);
+      --bg: radial-gradient(circle at top, #3b3b52, #141420 60%);
+      --shadow: rgba(0, 0, 0, 0.25);
+      --text: #f5f5f5;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      background: var(--bg);
+      color: var(--text);
+      user-select: none;
+    }
+
+    h1 {
+      margin: 0;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+    }
+
+    .scene {
+      width: clamp(260px, 60vw, 480px);
+      aspect-ratio: 1;
+      position: relative;
+      perspective: 1100px;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .scene.dragging {
+      cursor: grabbing;
+    }
+
+    .cube-wrapper {
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transition: transform 0.25s ease;
+    }
+
+    .cube {
+      position: relative;
+      width: 0;
+      height: 0;
+      top: 50%;
+      left: 50%;
+      transform-style: preserve-3d;
+    }
+
+    .rotator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      transform-style: preserve-3d;
+      transform-origin: center center;
+      pointer-events: none;
+      transition: transform 0.35s ease-in-out;
+    }
+
+    .cubie {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: var(--cubie-size);
+      height: var(--cubie-size);
+      margin: calc(var(--cubie-size) / -2);
+      transform-style: preserve-3d;
+      transition: transform 0.35s ease-in-out;
+    }
+
+    .face {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      backface-visibility: hidden;
+      border: 2px solid #111;
+      border-radius: 8px;
+      box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.35);
+      transition: background 0.2s ease;
+    }
+
+    .face::after {
+      content: "";
+      position: absolute;
+      inset: 2px;
+      border-radius: 6px;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.4);
+    }
+
+    .face.U { transform: rotateX(90deg) translateZ(calc(var(--cubie-size) / 2)); }
+    .face.D { transform: rotateX(-90deg) translateZ(calc(var(--cubie-size) / 2)); }
+    .face.F { transform: translateZ(calc(var(--cubie-size) / 2)); }
+    .face.B { transform: rotateY(180deg) translateZ(calc(var(--cubie-size) / 2)); }
+    .face.R { transform: rotateY(90deg) translateZ(calc(var(--cubie-size) / 2)); }
+    .face.L { transform: rotateY(-90deg) translateZ(calc(var(--cubie-size) / 2)); }
+
+    .panel {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      padding: 18px 24px;
+      border-radius: 18px;
+      background: rgba(8, 8, 18, 0.6);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    .panel h2 {
+      flex-basis: 100%;
+      margin: 0 0 8px;
+      font-size: 16px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      opacity: 0.75;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(44px, 1fr));
+      gap: 10px;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+      cursor: pointer;
+      transition: transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.16);
+      transform: translateY(-2px);
+      box-shadow: 0 14px 22px rgba(0, 0, 0, 0.45);
+    }
+
+    button:active {
+      transform: translateY(1px) scale(0.98);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .wide {
+      grid-column: span 3;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+    }
+
+    footer {
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      opacity: 0.7;
+    }
+
+    @media (max-width: 480px) {
+      .controls {
+        grid-template-columns: repeat(4, minmax(44px, 1fr));
+      }
+      .wide {
+        grid-column: span 2;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>3x3 魔方模拟器</h1>
+  <div class="scene" id="scene">
+    <div class="cube-wrapper" id="cubeWrapper">
+      <div class="cube" id="cube"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Moves</h2>
+    <div class="controls" id="controls"></div>
+    <button class="wide" data-action="scramble">打乱</button>
+    <button class="wide" data-action="reset">重置</button>
+  </div>
+
+  <footer>拖动旋转视角 · 按钮控制层旋转</footer>
+
+  <script>
+    const COLORS = {
+      U: '#f5f5f5',
+      D: '#f6d64a',
+      F: '#3ad078',
+      B: '#4991f4',
+      R: '#ff5a52',
+      L: '#ff9e3b'
+    };
+
+    const MOVE_DEFS = {
+      "U": { axis: 'y', value: 1, dir: 1 },
+      "U'": { axis: 'y', value: 1, dir: -1 },
+      "D": { axis: 'y', value: -1, dir: -1 },
+      "D'": { axis: 'y', value: -1, dir: 1 },
+      "R": { axis: 'x', value: 1, dir: -1 },
+      "R'": { axis: 'x', value: 1, dir: 1 },
+      "L": { axis: 'x', value: -1, dir: 1 },
+      "L'": { axis: 'x', value: -1, dir: -1 },
+      "F": { axis: 'z', value: 1, dir: -1 },
+      "F'": { axis: 'z', value: 1, dir: 1 },
+      "B": { axis: 'z', value: -1, dir: 1 },
+      "B'": { axis: 'z', value: -1, dir: -1 }
+    };
+
+    const AXIS_VECTORS = {
+      U: [0, 1, 0],
+      D: [0, -1, 0],
+      F: [0, 0, 1],
+      B: [0, 0, -1],
+      R: [1, 0, 0],
+      L: [-1, 0, 0]
+    };
+
+    const cubeEl = document.getElementById('cube');
+    const controlsEl = document.getElementById('controls');
+    const sceneEl = document.getElementById('scene');
+    const wrapperEl = document.getElementById('cubeWrapper');
+
+    const cubies = [];
+    let queue = [];
+    let animating = false;
+
+    const CUBIE_SIZE = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cubie-size'));
+    const GAP = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--gap'));
+    const STEP = CUBIE_SIZE + GAP;
+
+    function createCubie(x, y, z) {
+      const el = document.createElement('div');
+      el.className = 'cubie';
+      const faces = {};
+      const faceEls = {};
+
+      ['U', 'D', 'F', 'B', 'R', 'L'].forEach(face => {
+        const faceEl = document.createElement('div');
+        faceEl.className = `face ${face}`;
+        faceEl.style.background = 'rgba(40, 40, 40, 0.6)';
+        faceEl.style.setProperty('--shine', 'rgba(255, 255, 255, 0.18)');
+        faceEls[face] = faceEl;
+        el.appendChild(faceEl);
+      });
+
+      if (y === 1) faces.U = COLORS.U;
+      if (y === -1) faces.D = COLORS.D;
+      if (z === 1) faces.F = COLORS.F;
+      if (z === -1) faces.B = COLORS.B;
+      if (x === 1) faces.R = COLORS.R;
+      if (x === -1) faces.L = COLORS.L;
+
+      const cubie = {
+        position: { x, y, z },
+        faces,
+        faceEls,
+        el
+      };
+
+      cubies.push(cubie);
+      cubeEl.appendChild(el);
+      updateCubieTransform(cubie);
+      applyFaceColors(cubie);
+    }
+
+    function updateCubieTransform(cubie) {
+      const { x, y, z } = cubie.position;
+      cubie.el.style.transform = `translate3d(${x * STEP}px, ${-y * STEP}px, ${z * STEP}px)`;
+    }
+
+    function applyFaceColors(cubie) {
+      for (const face of ['U', 'D', 'F', 'B', 'R', 'L']) {
+        const color = cubie.faces[face];
+        const faceEl = cubie.faceEls[face];
+        if (!faceEl) continue;
+        if (color) {
+          faceEl.style.background = color;
+          faceEl.style.opacity = 1;
+        } else {
+          faceEl.style.background = 'rgba(20, 20, 26, 0.4)';
+          faceEl.style.opacity = 0.25;
+        }
+      }
+    }
+
+    function rotateVector([x, y, z], axis, dir) {
+      const angle = dir * Math.PI / 2;
+      const s = Math.round(Math.sin(angle));
+      const c = Math.round(Math.cos(angle));
+      if (axis === 'x') {
+        return [x, y * c - z * s, y * s + z * c];
+      }
+      if (axis === 'y') {
+        return [x * c + z * s, y, -x * s + z * c];
+      }
+      return [x * c - y * s, x * s + y * c, z];
+    }
+
+    function rotateCubieFaces(cubie, axis, dir) {
+      const result = {};
+      for (const [face, color] of Object.entries(cubie.faces)) {
+        const vector = AXIS_VECTORS[face];
+        const [x, y, z] = rotateVector(vector, axis, dir);
+        const newFace = Object.entries(AXIS_VECTORS).find(([, vec]) => vec[0] === x && vec[1] === y && vec[2] === z);
+        if (newFace) {
+          result[newFace[0]] = color;
+        }
+      }
+      cubie.faces = result;
+    }
+
+    function buildControls() {
+      const moves = Object.keys(MOVE_DEFS);
+      moves.forEach(move => {
+        const btn = document.createElement('button');
+        btn.textContent = move;
+        btn.dataset.move = move;
+        controlsEl.appendChild(btn);
+      });
+    }
+
+    function initCube() {
+      cubies.length = 0;
+      cubeEl.innerHTML = '';
+      for (let x = -1; x <= 1; x++) {
+        for (let y = -1; y <= 1; y++) {
+          for (let z = -1; z <= 1; z++) {
+            createCubie(x, y, z);
+          }
+        }
+      }
+    }
+
+    function enqueueMove(move) {
+      if (!MOVE_DEFS[move]) return;
+      queue.push(move);
+      if (!animating) {
+        processQueue();
+      }
+    }
+
+    function processQueue() {
+      if (!queue.length) {
+        animating = false;
+        return;
+      }
+      animating = true;
+      const move = queue.shift();
+      animateMove(move).then(() => {
+        processQueue();
+      });
+    }
+
+    function animateMove(move) {
+      const info = MOVE_DEFS[move];
+      if (!info) return Promise.resolve();
+      const affected = cubies.filter(c => c.position[info.axis] === info.value);
+      const rotator = document.createElement('div');
+      rotator.className = 'rotator';
+      cubeEl.appendChild(rotator);
+      affected.forEach(c => rotator.appendChild(c.el));
+
+      const axisTransform = {
+        x: angle => `rotateX(${angle}deg)`,
+        y: angle => `rotateY(${angle}deg)`,
+        z: angle => `rotateZ(${angle}deg)`
+      };
+      const targetAngle = info.dir * 90;
+
+      return new Promise(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            rotator.style.transform = axisTransform[info.axis](targetAngle);
+          });
+        });
+
+        const cleanup = () => {
+          rotator.style.transform = '';
+          affected.forEach(c => cubeEl.appendChild(c.el));
+          rotator.remove();
+
+          affected.forEach(cubie => {
+            const { x, y, z } = cubie.position;
+            const [nx, ny, nz] = rotateVector([x, y, z], info.axis, info.dir);
+            cubie.position = { x: nx, y: ny, z: nz };
+            rotateCubieFaces(cubie, info.axis, info.dir);
+            applyFaceColors(cubie);
+          });
+
+          cubies.forEach(updateCubieTransform);
+          resolve();
+        };
+
+        rotator.addEventListener('transitionend', function handle(e) {
+          if (e.target !== rotator) return;
+          rotator.removeEventListener('transitionend', handle);
+          cleanup();
+        });
+      });
+    }
+
+    function scramble(times = 25) {
+      const moves = Object.keys(MOVE_DEFS);
+      const sequence = [];
+      for (let i = 0; i < times; i++) {
+        const move = moves[Math.floor(Math.random() * moves.length)];
+        sequence.push(move);
+      }
+      sequence.forEach(move => enqueueMove(move));
+    }
+
+    function resetCube() {
+      queue = [];
+      animating = false;
+      initCube();
+    }
+
+    function setupControls() {
+      controlsEl.addEventListener('click', e => {
+        const move = e.target.dataset.move;
+        if (move) {
+          enqueueMove(move);
+        }
+      });
+
+      document.querySelector('[data-action="scramble"]').addEventListener('click', () => scramble());
+      document.querySelector('[data-action="reset"]').addEventListener('click', () => resetCube());
+    }
+
+    function setupDrag() {
+      let isDragging = false;
+      let lastX = 0;
+      let lastY = 0;
+      const rotation = { x: -28, y: -34 };
+
+      function applyRotation() {
+        wrapperEl.style.transform = `rotateX(${rotation.x}deg) rotateY(${rotation.y}deg)`;
+      }
+
+      applyRotation();
+
+      function startDrag(x, y) {
+        isDragging = true;
+        lastX = x;
+        lastY = y;
+        sceneEl.classList.add('dragging');
+      }
+
+      function moveDrag(x, y) {
+        if (!isDragging) return;
+        const dx = x - lastX;
+        const dy = y - lastY;
+        rotation.y += dx * 0.4;
+        rotation.x -= dy * 0.4;
+        rotation.x = Math.max(-90, Math.min(90, rotation.x));
+        applyRotation();
+        lastX = x;
+        lastY = y;
+      }
+
+      function endDrag() {
+        isDragging = false;
+        sceneEl.classList.remove('dragging');
+      }
+
+      sceneEl.addEventListener('mousedown', e => {
+        e.preventDefault();
+        startDrag(e.clientX, e.clientY);
+      });
+
+      window.addEventListener('mousemove', e => {
+        moveDrag(e.clientX, e.clientY);
+      });
+
+      window.addEventListener('mouseup', () => endDrag());
+      sceneEl.addEventListener('mouseleave', () => endDrag());
+
+      sceneEl.addEventListener('touchstart', e => {
+        const touch = e.touches[0];
+        startDrag(touch.clientX, touch.clientY);
+      }, { passive: false });
+
+      sceneEl.addEventListener('touchmove', e => {
+        const touch = e.touches[0];
+        moveDrag(touch.clientX, touch.clientY);
+      }, { passive: false });
+
+      window.addEventListener('touchend', () => endDrag());
+    }
+
+    buildControls();
+    initCube();
+    setupControls();
+    setupDrag();
+  </script>
+</body>
+</html>
