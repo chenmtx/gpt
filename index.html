@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>MiniCraft 3D</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Press Start 2P", "Courier New", monospace;
+    }
+    * {
+      box-sizing: border-box;
+      touch-action: none;
+    }
+    body, html {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at top, #4ec0ff, #13203f 70%);
+      color: #fdf6e3;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      image-rendering: pixelated;
+    }
+    #hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      padding: 8px 12px;
+      border: 3px solid rgba(255, 255, 255, 0.6);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      background: rgba(15, 21, 34, 0.6);
+      font-size: 12px;
+      line-height: 1.4;
+      text-shadow: 0 0 6px rgba(0,0,0,0.7);
+      pointer-events: none;
+    }
+    #crosshair {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 16px;
+      height: 16px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #crosshair:before,
+    #crosshair:after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,0.85);
+    }
+    #crosshair:before {
+      left: 50%;
+      top: 0;
+      width: 2px;
+      height: 16px;
+      transform: translateX(-50%);
+    }
+    #crosshair:after {
+      top: 50%;
+      left: 0;
+      width: 16px;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+    #touch-controls {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      display: grid;
+      grid-template-columns: repeat(3, 54px);
+      grid-template-rows: repeat(2, 54px);
+      gap: 8px;
+      z-index: 10;
+    }
+    #touch-look {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.4);
+      background: rgba(10,12,18,0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .touch-btn {
+      background: rgba(10,12,18,0.65);
+      border: 3px solid rgba(255,255,255,0.5);
+      border-radius: 12px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.4);
+      font-size: 18px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+    .touch-btn:active {
+      transform: scale(0.95);
+      border-color: rgba(255,255,255,0.9);
+    }
+    #inventory {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 9;
+    }
+    .slot {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(255,255,255,0.4);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15,21,34,0.65);
+      position: relative;
+      font-size: 12px;
+      text-shadow: 0 2px 0 rgba(0,0,0,0.8);
+    }
+    .slot.active {
+      border-color: #ffd166;
+      box-shadow: 0 0 18px rgba(255,209,102,0.6);
+    }
+    .slot span {
+      position: absolute;
+      bottom: 4px;
+      right: 6px;
+      opacity: 0.8;
+      font-size: 10px;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="hud">
+    <div>MiniCraft &bull; v0.1</div>
+    <div>Tap to focus & build worlds.</div>
+    <div id="hud-info"></div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="inventory"></div>
+  <div id="touch-controls" hidden>
+    <div class="touch-btn" data-dir="forward">▲</div>
+    <div class="touch-btn" data-dir="jump">⤴</div>
+    <div class="touch-btn" data-dir="backward">▼</div>
+    <div class="touch-btn" data-dir="left">◀</div>
+    <div class="touch-btn" data-dir="sneak">⤵</div>
+    <div class="touch-btn" data-dir="right">▶</div>
+  </div>
+  <div id="touch-look" hidden>
+    <div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,0.3);"></div>
+  </div>
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161/build/three.module.js";
+    import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.161/examples/jsm/controls/OrbitControls.js";
+
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    const worldSize = 96;
+    const chunkSize = 16;
+    const maxHeight = 26;
+    const blockSize = 1;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x7ec8ff);
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(24, 32, 24);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const hemiLight = new THREE.HemisphereLight(0xb1e1ff, 0x3d2b1f, 0.7);
+    scene.add(hemiLight);
+    const dirLight = new THREE.DirectionalLight(0xfff9d6, 1.0);
+    dirLight.position.set(60, 80, -20);
+    dirLight.castShadow = false;
+    scene.add(dirLight);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.minPolarAngle = 0.3;
+    controls.maxPolarAngle = Math.PI / 2.1;
+    controls.enablePan = false;
+    controls.target.set(worldSize / 2, 18, worldSize / 2);
+    controls.enabled = false;
+
+    const clock = new THREE.Clock();
+
+    function makePaletteTexture(colors) {
+      const size = Math.ceil(Math.sqrt(colors.length));
+      const data = new Uint8Array(size * size * 3);
+      colors.forEach((c, i) => {
+        const [r, g, b] = c.match(/\w\w/g).map(v => parseInt(v, 16));
+        data[i * 3 + 0] = r;
+        data[i * 3 + 1] = g;
+        data[i * 3 + 2] = b;
+      });
+      const texture = new THREE.DataTexture(data, size, size, THREE.RGBFormat);
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    const palette = makePaletteTexture([
+      "5B8C5A", // grass
+      "4C6B3C", // leaves
+      "C49C6B", // trunk
+      "8B7355", // dirt
+      "7A8394", // stone
+      "F2E9E4", // snow
+      "FFE066", // sun
+      "A0C4FF", // water
+      "FF595E", // mob
+      "FFCA3A"  // highlight
+    ]);
+
+    const blockMaterials = {
+      grass: new THREE.MeshLambertMaterial({ color: 0x4ca64c, map: null }),
+      dirt: new THREE.MeshLambertMaterial({ color: 0x8f6b3d }),
+      stone: new THREE.MeshLambertMaterial({ color: 0x888b95 }),
+      leaves: new THREE.MeshLambertMaterial({ color: 0x4d8c44, transparent: true, opacity: 0.92 }),
+      log: new THREE.MeshLambertMaterial({ color: 0x8f5f2e }),
+      sand: new THREE.MeshLambertMaterial({ color: 0xd9c27f }),
+      water: new THREE.MeshLambertMaterial({ color: 0x3a7dd1, transparent: true, opacity: 0.55 })
+    };
+
+    class Noise {
+      constructor(seed = 1) {
+        this.seed = seed;
+      }
+      random(x) {
+        return Math.abs(Math.sin(x * 12.9898 + this.seed) * 43758.5453) % 1;
+      }
+      smoothNoise(x, z) {
+        const corners = (this.random(x - 1 + (z - 1) * 57) + this.random(x + 1 + (z - 1) * 57) + this.random(x - 1 + (z + 1) * 57) + this.random(x + 1 + (z + 1) * 57)) / 16;
+        const sides = (this.random(x - 1 + z * 57) + this.random(x + 1 + z * 57) + this.random(x + (z - 1) * 57) + this.random(x + (z + 1) * 57)) / 8;
+        const center = this.random(x + z * 57) / 4;
+        return corners + sides + center;
+      }
+      interpolatedNoise(x, z) {
+        const integer_X = Math.floor(x);
+        const fractional_X = x - integer_X;
+        const integer_Z = Math.floor(z);
+        const fractional_Z = z - integer_Z;
+        const v1 = this.smoothNoise(integer_X, integer_Z);
+        const v2 = this.smoothNoise(integer_X + 1, integer_Z);
+        const v3 = this.smoothNoise(integer_X, integer_Z + 1);
+        const v4 = this.smoothNoise(integer_X + 1, integer_Z + 1);
+        const i1 = this.interpolate(v1, v2, fractional_X);
+        const i2 = this.interpolate(v3, v4, fractional_X);
+        return this.interpolate(i1, i2, fractional_Z);
+      }
+      perlin(x, z) {
+        let total = 0;
+        const persistence = 0.45;
+        const octaves = 6;
+        for (let i = 0; i < octaves; i++) {
+          const frequency = Math.pow(2, i);
+          const amplitude = Math.pow(persistence, i);
+          total += this.interpolatedNoise(x * frequency / 50, z * frequency / 50) * amplitude;
+        }
+        return total;
+      }
+      interpolate(a, b, x) {
+        const ft = x * Math.PI;
+        const f = (1 - Math.cos(ft)) * 0.5;
+        return a * (1 - f) + b * f;
+      }
+    }
+
+    const noise = new Noise(Math.random() * 1000);
+
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const blockGeo = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+    blockGeo.translate(0, blockSize / 2, 0);
+
+    const world = new Map();
+
+    function addBlock(x, y, z, materialKey) {
+      const mesh = new THREE.Mesh(blockGeo, blockMaterials[materialKey]);
+      mesh.position.set(x * blockSize, y * blockSize, z * blockSize);
+      mesh.userData = { x, y, z, materialKey };
+      worldGroup.add(mesh);
+      world.set(`${x},${y},${z}`, mesh);
+      return mesh;
+    }
+
+    function buildTree(x, y, z) {
+      const trunkHeight = 4 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < trunkHeight; i++) {
+        addBlock(x, y + i, z, "log");
+      }
+      const radius = 2;
+      const top = y + trunkHeight;
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dz = -radius; dz <= radius; dz++) {
+            if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < radius + 1 && Math.random() > 0.2) {
+              addBlock(x + dx, top + dy, z + dz, "leaves");
+            }
+          }
+        }
+      }
+    }
+
+    function generateTerrain() {
+      for (let x = 0; x < worldSize; x++) {
+        for (let z = 0; z < worldSize; z++) {
+          const heightValue = Math.floor(noise.perlin(x, z) * maxHeight) + 8;
+          const waterLevel = 12;
+          for (let y = 0; y < heightValue; y++) {
+            let type = "dirt";
+            if (y === heightValue - 1) {
+              type = heightValue < waterLevel + 1 ? "sand" : "grass";
+            } else if (y < heightValue - 4) {
+              type = "stone";
+            }
+            addBlock(x, y, z, type);
+          }
+          if (heightValue < waterLevel) {
+            for (let w = heightValue; w < waterLevel; w++) {
+              addBlock(x, w, z, "water");
+            }
+          }
+          if (Math.random() < 0.02 && heightValue > waterLevel + 2) {
+            buildTree(x, heightValue, z);
+          }
+        }
+      }
+    }
+
+    generateTerrain();
+
+    class Mob {
+      constructor() {
+        const geo = new THREE.BoxGeometry(0.8, 1.2, 0.4);
+        const material = new THREE.MeshLambertMaterial({ color: 0xff595e });
+        this.mesh = new THREE.Mesh(geo, material);
+        this.mesh.castShadow = false;
+        this.speed = 0.8 + Math.random() * 0.6;
+        this.direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+        this.heightOffset = 0;
+        worldGroup.add(this.mesh);
+        this.respawn();
+      }
+      respawn() {
+        const x = Math.floor(Math.random() * worldSize);
+        const z = Math.floor(Math.random() * worldSize);
+        for (let y = maxHeight + 40; y >= 0; y--) {
+          const key = `${x},${y},${z}`;
+          if (world.has(key)) {
+            this.mesh.position.set(x, y + 1.2, z);
+            return;
+          }
+        }
+        this.mesh.position.set(x, 20, z);
+      }
+      update(delta) {
+        const move = this.direction.clone().multiplyScalar(delta * this.speed);
+        this.mesh.position.add(move);
+        this.heightOffset += delta;
+        this.mesh.position.y += Math.sin(this.heightOffset * 2) * 0.01;
+
+        if (Math.random() < 0.01) {
+          this.direction.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+        }
+
+        if (this.mesh.position.x < 1 || this.mesh.position.x > worldSize - 1 || this.mesh.position.z < 1 || this.mesh.position.z > worldSize - 1) {
+          this.direction.multiplyScalar(-1);
+        }
+      }
+    }
+
+    const mobs = Array.from({ length: 12 }, () => new Mob());
+
+    const player = {
+      velocity: new THREE.Vector3(),
+      position: new THREE.Vector3(worldSize / 2, 35, worldSize / 2),
+      direction: new THREE.Vector3(),
+      speed: 8,
+      fly: false,
+      yaw: 0,
+      pitch: 0
+    };
+
+    const keys = new Set();
+    document.addEventListener("keydown", e => {
+      keys.add(e.code);
+      if (e.code === "KeyF") player.fly = !player.fly;
+    });
+    document.addEventListener("keyup", e => keys.delete(e.code));
+
+    const pointer = { active: false, x: 0, y: 0 };
+    renderer.domElement.addEventListener("pointerdown", e => {
+      pointer.active = true;
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+    });
+    window.addEventListener("pointerup", () => pointer.active = false);
+    window.addEventListener("pointermove", e => {
+      if (!pointer.active) return;
+      const movementX = e.movementX || e.clientX - pointer.x;
+      const movementY = e.movementY || e.clientY - pointer.y;
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      player.yaw -= movementX * 0.0025;
+      player.pitch -= movementY * 0.0025;
+      player.pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, player.pitch));
+    });
+
+    function updatePlayer(delta) {
+      const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+      const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+      player.direction.set(0, 0, 0);
+      if (keys.has("KeyW")) player.direction.add(forward);
+      if (keys.has("KeyS")) player.direction.sub(forward);
+      if (keys.has("KeyA")) player.direction.sub(right);
+      if (keys.has("KeyD")) player.direction.add(right);
+      player.direction.normalize();
+      const acceleration = player.direction.clone().multiplyScalar(player.speed * delta);
+      player.velocity.x += acceleration.x;
+      player.velocity.z += acceleration.z;
+      player.velocity.x *= 0.86;
+      player.velocity.z *= 0.86;
+
+      if (player.fly) {
+        if (keys.has("Space")) player.velocity.y = player.speed * 0.6;
+        else if (keys.has("ShiftLeft")) player.velocity.y = -player.speed * 0.6;
+        else player.velocity.y = 0;
+      } else {
+        player.velocity.y -= 20 * delta;
+        if (keys.has("Space") && onGround(player.position)) {
+          player.velocity.y = 8;
+        }
+      }
+
+      player.position.addScaledVector(player.velocity, delta);
+
+      // Collision detection
+      const footKey = `${Math.round(player.position.x)},${Math.floor(player.position.y - 1)},${Math.round(player.position.z)}`;
+      if (world.has(footKey) && !player.fly) {
+        player.position.y = Math.ceil(player.position.y);
+        player.velocity.y = Math.max(0, player.velocity.y);
+      }
+
+      camera.position.copy(player.position);
+      const lookDir = new THREE.Vector3(
+        Math.sin(player.yaw) * Math.cos(player.pitch),
+        Math.sin(player.pitch),
+        Math.cos(player.yaw) * Math.cos(player.pitch)
+      );
+      camera.lookAt(player.position.clone().add(lookDir));
+    }
+
+    function onGround(pos) {
+      const key = `${Math.round(pos.x)},${Math.floor(pos.y - 1.2)},${Math.round(pos.z)}`;
+      return world.has(key);
+    }
+
+    const hudInfo = document.getElementById("hud-info");
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      if (isMobile) {
+        updateTouchMovement(delta);
+      }
+      updatePlayer(delta);
+      mobs.forEach(m => m.update(delta));
+      hudInfo.textContent = `XYZ: ${player.position.x.toFixed(1)}, ${player.position.y.toFixed(1)}, ${player.position.z.toFixed(1)}  |  Fly: ${player.fly ? "ON" : "OFF"}`;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Inventory logic
+    const inventoryData = [
+      { key: "grass", label: "Grass" },
+      { key: "dirt", label: "Dirt" },
+      { key: "stone", label: "Stone" },
+      { key: "log", label: "Log" },
+      { key: "leaves", label: "Leaf" },
+      { key: "sand", label: "Sand" }
+    ];
+    let activeSlot = 0;
+    const inventory = document.getElementById("inventory");
+
+    function rebuildInventory() {
+      inventory.innerHTML = "";
+      inventoryData.forEach((item, index) => {
+        const slot = document.createElement("div");
+        slot.className = "slot" + (index === activeSlot ? " active" : "");
+        slot.innerHTML = `${item.label}<span>${index + 1}</span>`;
+        slot.addEventListener("click", () => {
+          activeSlot = index;
+          rebuildInventory();
+        });
+        inventory.appendChild(slot);
+      });
+    }
+    rebuildInventory();
+
+    window.addEventListener("keydown", e => {
+      if (e.key >= "1" && e.key <= "6") {
+        activeSlot = parseInt(e.key, 10) - 1;
+        rebuildInventory();
+      }
+    });
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function blockInteract(remove = true) {
+      mouse.set(0, 0);
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(worldGroup.children, false);
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const target = hit.object;
+        if (remove) {
+          worldGroup.remove(target);
+          world.delete(`${target.userData.x},${target.userData.y},${target.userData.z}`);
+        } else {
+          const normal = hit.face.normal.clone();
+          const position = target.position.clone().divideScalar(blockSize).add(normal);
+          const blockKey = `${Math.round(position.x)},${Math.round(position.y)},${Math.round(position.z)}`;
+          if (!world.has(blockKey)) {
+            addBlock(Math.round(position.x), Math.round(position.y), Math.round(position.z), inventoryData[activeSlot].key);
+          }
+        }
+      }
+    }
+
+    renderer.domElement.addEventListener("click", e => {
+      if (e.button === 0) {
+        blockInteract(true);
+      }
+    });
+    renderer.domElement.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      blockInteract(false);
+    });
+    renderer.domElement.addEventListener("touchstart", e => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        blockInteract(true);
+      } else if (e.touches.length >= 2) {
+        blockInteract(false);
+      }
+    });
+
+    // Touch Controls
+    const touchControls = document.getElementById("touch-controls");
+    const touchLook = document.getElementById("touch-look");
+
+    if (isMobile) {
+      touchControls.hidden = false;
+      touchLook.hidden = false;
+      controls.enabled = false;
+      renderer.domElement.style.cursor = "default";
+    }
+
+    const touchState = { lookId: null, lookLast: null, moveDirs: new Set() };
+
+    function updateTouchMovement(delta) {
+      const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+      const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+      let direction = new THREE.Vector3();
+      touchState.moveDirs.forEach(dir => {
+        if (dir === "forward") direction.add(forward);
+        if (dir === "backward") direction.sub(forward);
+        if (dir === "left") direction.sub(right);
+        if (dir === "right") direction.add(right);
+        if (dir === "jump") keys.add("Space");
+        if (dir === "sneak") keys.add("ShiftLeft");
+      });
+      direction.normalize();
+      if (direction.lengthSq() > 0) {
+        player.velocity.x += direction.x * player.speed * delta;
+        player.velocity.z += direction.z * player.speed * delta;
+      }
+    }
+
+    touchControls.querySelectorAll('.touch-btn').forEach(btn => {
+      const dir = btn.dataset.dir;
+      const on = e => {
+        e.preventDefault();
+        touchState.moveDirs.add(dir);
+      };
+      const off = e => {
+        e.preventDefault();
+        touchState.moveDirs.delete(dir);
+        keys.delete("Space");
+        keys.delete("ShiftLeft");
+      };
+      btn.addEventListener('touchstart', on);
+      btn.addEventListener('touchend', off);
+      btn.addEventListener('touchcancel', off);
+    });
+
+    touchLook.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      touchState.lookId = touch.identifier;
+      touchState.lookLast = { x: touch.clientX, y: touch.clientY };
+    });
+    touchLook.addEventListener('touchmove', e => {
+      e.preventDefault();
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === touchState.lookId) {
+          const dx = touch.clientX - touchState.lookLast.x;
+          const dy = touch.clientY - touchState.lookLast.y;
+          touchState.lookLast = { x: touch.clientX, y: touch.clientY };
+          player.yaw -= dx * 0.01;
+          player.pitch -= dy * 0.01;
+          player.pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, player.pitch));
+        }
+      }
+    });
+    touchLook.addEventListener('touchend', e => {
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === touchState.lookId) {
+          touchState.lookId = null;
+          touchState.lookLast = null;
+        }
+      }
+    });
+
+    // Seasonal sky gradient animation
+    const skyColors = [
+      new THREE.Color(0x7ec8ff),
+      new THREE.Color(0xffc8dd),
+      new THREE.Color(0x6ee7ff),
+      new THREE.Color(0x293241)
+    ];
+    let skyIndex = 0;
+    setInterval(() => {
+      skyIndex = (skyIndex + 1) % skyColors.length;
+      const next = skyColors[skyIndex];
+      const prev = scene.background.clone();
+      let progress = 0;
+      const transition = () => {
+        progress += 0.01;
+        scene.background = prev.clone().lerp(next, progress);
+        if (progress < 1) requestAnimationFrame(transition);
+      };
+      transition();
+    }, 12000);
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
