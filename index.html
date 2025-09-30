@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>VoxelCraft Web</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="ui">
+      <div id="hud">
+        <div id="crosshair"></div>
+        <div id="toolbar"></div>
+      </div>
+      <div id="touch-controls">
+        <div id="joystick">
+          <div id="joystick-handle"></div>
+        </div>
+        <div id="buttons">
+          <button id="jump-btn">跳跃</button>
+          <button id="build-btn">放置</button>
+          <button id="break-btn">破坏</button>
+        </div>
+      </div>
+    </div>
+    <canvas id="game"></canvas>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
