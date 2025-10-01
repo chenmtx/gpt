@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClipCraft Studio</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      --bg: #111820;
+      --panel: rgba(27, 37, 51, 0.92);
+      --accent: #5d9bff;
+      --accent-strong: #2f78ff;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f5f8ff;
+      --text-soft: rgba(245, 248, 255, 0.7);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #1c2840, #0b1018 55%);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 24px clamp(16px, 4vw, 48px) 12px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 2.4vw, 2.6rem);
+      letter-spacing: 0.04em;
+    }
+
+    header .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    label.button-like {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: transform 150ms ease, filter 150ms ease;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    button:hover:not(:disabled),
+    label.button-like:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+      gap: clamp(16px, 3vw, 32px);
+      padding: 0 clamp(16px, 4vw, 48px) 40px;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: clamp(18px, 3vw, 28px);
+      box-shadow: 0 25px 60px rgba(10, 16, 30, 0.4);
+      backdrop-filter: blur(18px);
+    }
+
+    .panel h2 {
+      margin-top: 0;
+      font-size: 1.1rem;
+      letter-spacing: 0.08em;
+      color: var(--text-soft);
+      text-transform: uppercase;
+    }
+
+    .panel + .panel {
+      margin-top: 16px;
+    }
+
+    .inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-group label {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-soft);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .timeline {
+      display: grid;
+      gap: 8px;
+      color: var(--text-soft);
+      font-size: 0.8rem;
+    }
+
+    .timeline span {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .preview-wrapper {
+      position: relative;
+      border-radius: 24px;
+      overflow: hidden;
+      background: #05070d;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      aspect-ratio: 16 / 9;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .overlay-controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 12px;
+    }
+
+    select,
+    input[type="number"],
+    .mini-button {
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .mini-button {
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+
+    .mini-button:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .sticker-list {
+      margin-top: 16px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .sticker-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 14px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+    }
+
+    .sticker-item.active {
+      outline: 2px solid var(--accent);
+      background: rgba(93, 155, 255, 0.18);
+    }
+
+    .export-progress {
+      margin-top: 14px;
+      font-size: 0.85rem;
+      color: var(--text-soft);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    footer {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-soft);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ClipCraft Studio</h1>
+    <div class="actions">
+      <label class="button-like" for="video-input">🎬 导入视频</label>
+      <label class="button-like" for="audio-input">🎧 添加音频</label>
+      <button id="export-btn" disabled>📤 导出视频</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel inputs">
+      <div class="input-group">
+        <label>播放控制</label>
+        <div class="overlay-controls">
+          <button id="play-toggle" disabled>▶️ 播放</button>
+          <button id="rewind-btn" disabled class="mini-button">⏮️ 0s</button>
+          <span id="time-label">00:00 / 00:00</span>
+        </div>
+        <div class="timeline">
+          <span>
+            <small>时间轴</small>
+          </span>
+          <input type="range" id="timeline" value="0" min="0" max="1" step="0.0001" disabled />
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>音频混音</label>
+        <div class="overlay-controls">
+          <span>原视频音量</span>
+          <input type="range" id="video-volume" min="0" max="1" step="0.01" value="1" />
+        </div>
+        <div class="overlay-controls">
+          <span>导入音频音量</span>
+          <input type="range" id="extra-volume" min="0" max="1" step="0.01" value="0.8" />
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>添加表情包</label>
+        <div class="overlay-controls">
+          <select id="sticker-select">
+            <option value="😀">😀 微笑</option>
+            <option value="🎉">🎉 派对</option>
+            <option value="🔥">🔥 火焰</option>
+            <option value="😎">😎 酷炫</option>
+            <option value="❤️">❤️ 喜爱</option>
+            <option value="💡">💡 灵感</option>
+          </select>
+          <button id="add-sticker" class="mini-button">➕ 添加</button>
+          <label class="mini-button" for="sticker-image-input">🖼️ 自定义图片</label>
+        </div>
+        <div class="overlay-controls" id="sticker-tools" hidden>
+          <span>位置调整：拖拽预览画面</span>
+          <span>大小</span>
+          <input type="range" id="sticker-size" min="40" max="240" value="120" />
+          <button id="remove-sticker" class="mini-button">🗑️ 删除</button>
+        </div>
+        <div class="sticker-list" id="sticker-list"></div>
+      </div>
+
+      <div class="input-group">
+        <label>导出</label>
+        <div class="overlay-controls">
+          <button id="start-export" class="mini-button" disabled>🎬 开始录制</button>
+          <button id="stop-export" class="mini-button" disabled>⏹️ 停止</button>
+        </div>
+        <div class="export-progress" id="export-status">请导入视频后开始创作。</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="preview-wrapper">
+        <canvas id="preview" width="1280" height="720"></canvas>
+      </div>
+      <p style="margin-top:12px;color:var(--text-soft);font-size:0.85rem;">
+        提示：点击预览画面可选择表情包并拖动位置，大小可在左侧调整。
+      </p>
+    </section>
+  </main>
+
+  <input type="file" id="video-input" accept="video/*" />
+  <input type="file" id="audio-input" accept="audio/*" />
+  <input type="file" id="sticker-image-input" accept="image/*" />
+
+  <video id="source-video" playsinline crossorigin="anonymous" style="display:none;"></video>
+  <audio id="extra-audio" crossorigin="anonymous" style="display:none;"></audio>
+
+  <footer>ClipCraft Studio © 2024 - 轻量网页剪辑工作室</footer>
+
+  <script>
+    const videoInput = document.getElementById('video-input');
+    const audioInput = document.getElementById('audio-input');
+    const stickerImageInput = document.getElementById('sticker-image-input');
+    const videoElement = document.getElementById('source-video');
+    const extraAudio = document.getElementById('extra-audio');
+    const canvas = document.getElementById('preview');
+    const ctx = canvas.getContext('2d');
+
+    const playToggle = document.getElementById('play-toggle');
+    const rewindBtn = document.getElementById('rewind-btn');
+    const timeline = document.getElementById('timeline');
+    const timeLabel = document.getElementById('time-label');
+    const videoVolume = document.getElementById('video-volume');
+    const extraVolume = document.getElementById('extra-volume');
+    const exportBtn = document.getElementById('export-btn');
+    const startExportBtn = document.getElementById('start-export');
+    const stopExportBtn = document.getElementById('stop-export');
+    const exportStatus = document.getElementById('export-status');
+
+    const stickerSelect = document.getElementById('sticker-select');
+    const addStickerBtn = document.getElementById('add-sticker');
+    const stickerList = document.getElementById('sticker-list');
+    const stickerTools = document.getElementById('sticker-tools');
+    const stickerSize = document.getElementById('sticker-size');
+    const removeStickerBtn = document.getElementById('remove-sticker');
+
+    let animationId;
+    let audioContext;
+    let videoSourceNode;
+    let extraSourceNode;
+    let videoGainNode;
+    let extraGainNode;
+    let mixDestination;
+    let recorder;
+    let recordedChunks = [];
+    let currentStickerId = 0;
+
+    const stickers = [];
+
+    function formatTime(seconds) {
+      if (isNaN(seconds)) return '00:00';
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function draw() {
+      if (!videoElement.src) {
+        ctx.fillStyle = '#1b2738';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.font = '48px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('请导入视频', canvas.width / 2, canvas.height / 2);
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+      stickers.forEach((sticker) => {
+        ctx.save();
+        ctx.translate(sticker.x, sticker.y);
+        ctx.scale(sticker.size / 120, sticker.size / 120);
+        if (sticker.image) {
+          const ratio = sticker.image.width / sticker.image.height;
+          const width = 120 * ratio;
+          ctx.drawImage(sticker.image, -width / 2, -60, width, 120);
+        } else {
+          ctx.font = '120px serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(sticker.content, 0, 0);
+        }
+
+        if (sticker === getActiveSticker()) {
+          ctx.strokeStyle = 'rgba(93, 155, 255, 0.8)';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(-60, -60, 120, 120);
+        }
+        ctx.restore();
+      });
+
+      animationId = requestAnimationFrame(draw);
+    }
+
+    function ensureAudioContext() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        mixDestination = audioContext.createMediaStreamDestination();
+      }
+      if (!videoSourceNode) {
+        videoSourceNode = audioContext.createMediaElementSource(videoElement);
+        videoGainNode = audioContext.createGain();
+        videoGainNode.gain.value = parseFloat(videoVolume.value);
+        videoSourceNode.connect(videoGainNode).connect(mixDestination);
+      }
+    }
+
+    function updateTimeLabel() {
+      const current = formatTime(videoElement.currentTime || 0);
+      const total = formatTime(videoElement.duration || 0);
+      timeLabel.textContent = `${current} / ${total}`;
+    }
+
+    function updateTimeline() {
+      if (!videoElement.duration) return;
+      timeline.value = videoElement.currentTime / videoElement.duration;
+      updateTimeLabel();
+    }
+
+    function enableControls() {
+      playToggle.disabled = false;
+      rewindBtn.disabled = false;
+      timeline.disabled = false;
+      exportBtn.disabled = false;
+      startExportBtn.disabled = false;
+    }
+
+    function addStickerToList(sticker) {
+      const item = document.createElement('div');
+      item.className = 'sticker-item';
+      item.dataset.id = sticker.id;
+      item.innerHTML = `<span>${sticker.label}</span><small>大小 ${Math.round(sticker.size)}px</small>`;
+      item.addEventListener('click', () => selectSticker(sticker.id));
+      sticker.dom = item;
+      stickerList.appendChild(item);
+      updateStickerUI();
+    }
+
+    function updateStickerUI() {
+      stickerList.childNodes.forEach((node) => {
+        const sticker = stickers.find((s) => s.id.toString() === node.dataset.id);
+        node.classList.toggle('active', sticker && sticker.active);
+        if (sticker) {
+          node.querySelector('small').textContent = `大小 ${Math.round(sticker.size)}px`;
+        }
+      });
+
+      const hasActive = Boolean(getActiveSticker());
+      stickerTools.hidden = !hasActive;
+      if (hasActive) {
+        stickerSize.value = getActiveSticker().size;
+      }
+    }
+
+    function selectSticker(id) {
+      stickers.forEach((sticker) => {
+        sticker.active = sticker.id === id;
+      });
+      updateStickerUI();
+    }
+
+    function getActiveSticker() {
+      return stickers.find((s) => s.active);
+    }
+
+    function removeActiveSticker() {
+      const active = getActiveSticker();
+      if (!active) return;
+      const index = stickers.indexOf(active);
+      if (index >= 0) stickers.splice(index, 1);
+      if (active.dom) active.dom.remove();
+      stickerTools.hidden = true;
+    }
+
+    videoInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      videoElement.src = url;
+      videoElement.muted = true;
+      videoElement.load();
+      videoElement.addEventListener(
+        'loadedmetadata',
+        () => {
+          canvas.width = videoElement.videoWidth || 1280;
+          canvas.height = videoElement.videoHeight || 720;
+          enableControls();
+          exportStatus.textContent = '视频已导入，准备播放或导出。';
+          updateTimeLabel();
+          cancelAnimationFrame(animationId);
+          draw();
+        },
+        { once: true }
+      );
+    });
+
+    audioInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      extraAudio.src = url;
+      extraAudio.loop = true;
+      extraAudio.load();
+      extraAudio.play().catch(() => {});
+      ensureAudioContext();
+      if (!extraSourceNode) {
+        extraSourceNode = audioContext.createMediaElementSource(extraAudio);
+        extraGainNode = audioContext.createGain();
+        extraGainNode.gain.value = parseFloat(extraVolume.value);
+        extraSourceNode.connect(extraGainNode).connect(mixDestination);
+      }
+      exportStatus.textContent = '音频已导入，可调节音量完成混音。';
+    });
+
+    stickerImageInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const sticker = {
+            id: currentStickerId++,
+            content: 'image',
+            image: img,
+            label: file.name,
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 120,
+            active: false,
+          };
+          stickers.push(sticker);
+          addStickerToList(sticker);
+          selectSticker(sticker.id);
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    addStickerBtn.addEventListener('click', () => {
+      const sticker = {
+        id: currentStickerId++,
+        content: stickerSelect.value,
+        label: stickerSelect.options[stickerSelect.selectedIndex].text,
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        size: 120,
+        active: false,
+      };
+      stickers.push(sticker);
+      addStickerToList(sticker);
+      selectSticker(sticker.id);
+    });
+
+    stickerSize.addEventListener('input', () => {
+      const sticker = getActiveSticker();
+      if (!sticker) return;
+      sticker.size = parseFloat(stickerSize.value);
+      updateStickerUI();
+    });
+
+    removeStickerBtn.addEventListener('click', () => {
+      removeActiveSticker();
+    });
+
+    canvas.addEventListener('pointerdown', (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+      const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+      let hit = false;
+      [...stickers].reverse().forEach((sticker) => {
+        if (hit) return;
+        const size = sticker.size;
+        if (x >= sticker.x - size / 2 && x <= sticker.x + size / 2 && y >= sticker.y - size / 2 && y <= sticker.y + size / 2) {
+          selectSticker(sticker.id);
+          hit = true;
+        }
+      });
+      if (!hit) {
+        stickers.forEach((sticker) => (sticker.active = false));
+        updateStickerUI();
+        return;
+      }
+
+      const active = getActiveSticker();
+      if (!active) return;
+
+      const pointerMove = (moveEvent) => {
+        const rectMove = canvas.getBoundingClientRect();
+        const xMove = ((moveEvent.clientX - rectMove.left) / rectMove.width) * canvas.width;
+        const yMove = ((moveEvent.clientY - rectMove.top) / rectMove.height) * canvas.height;
+        active.x = xMove;
+        active.y = yMove;
+      };
+
+      const pointerUp = () => {
+        window.removeEventListener('pointermove', pointerMove);
+        window.removeEventListener('pointerup', pointerUp);
+      };
+
+      window.addEventListener('pointermove', pointerMove);
+      window.addEventListener('pointerup', pointerUp);
+    });
+
+    playToggle.addEventListener('click', async () => {
+      if (!videoElement.src) return;
+      ensureAudioContext();
+      try {
+        await audioContext.resume();
+      } catch (e) {}
+
+      if (videoElement.paused) {
+        await videoElement.play();
+        if (extraAudio.src) {
+          extraAudio.play().catch(() => {});
+        }
+        playToggle.textContent = '⏸️ 暂停';
+      } else {
+        videoElement.pause();
+        extraAudio.pause();
+        playToggle.textContent = '▶️ 播放';
+      }
+    });
+
+    rewindBtn.addEventListener('click', () => {
+      if (!videoElement.src) return;
+      videoElement.currentTime = 0;
+      if (extraAudio.src) extraAudio.currentTime = 0;
+      updateTimeline();
+    });
+
+    timeline.addEventListener('input', () => {
+      if (!videoElement.duration) return;
+      videoElement.currentTime = timeline.value * videoElement.duration;
+      if (extraAudio.src) {
+        extraAudio.currentTime = videoElement.currentTime % extraAudio.duration;
+      }
+      updateTimeLabel();
+    });
+
+    videoElement.addEventListener('timeupdate', updateTimeline);
+    videoElement.addEventListener('ended', () => {
+      playToggle.textContent = '▶️ 播放';
+      if (extraAudio.src) extraAudio.pause();
+    });
+
+    videoVolume.addEventListener('input', () => {
+      ensureAudioContext();
+      if (videoGainNode) videoGainNode.gain.value = parseFloat(videoVolume.value);
+    });
+
+    extraVolume.addEventListener('input', () => {
+      ensureAudioContext();
+      if (extraGainNode) extraGainNode.gain.value = parseFloat(extraVolume.value);
+    });
+
+    exportBtn.addEventListener('click', () => {
+      exportStatus.textContent = '请使用“开始录制”按钮导出视频。';
+    });
+
+    function createRecorder() {
+      const canvasStream = canvas.captureStream(30);
+      ensureAudioContext();
+      const composedStream = new MediaStream([
+        ...canvasStream.getVideoTracks(),
+        ...mixDestination.stream.getAudioTracks(),
+      ]);
+
+      recorder = new MediaRecorder(composedStream, {
+        mimeType: 'video/webm;codecs=vp9,opus',
+        videoBitsPerSecond: 5_000_000,
+        audioBitsPerSecond: 192_000,
+      });
+
+      recordedChunks = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) recordedChunks.push(event.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'clipcraft-export.webm';
+        a.click();
+        URL.revokeObjectURL(url);
+        exportStatus.textContent = '导出完成，视频已下载。';
+        startExportBtn.disabled = false;
+        stopExportBtn.disabled = true;
+      };
+    }
+
+    startExportBtn.addEventListener('click', async () => {
+      if (!videoElement.src) return;
+      createRecorder();
+      recorder.start();
+      exportStatus.textContent = '导出中……请等待视频播放完毕或手动停止。';
+      startExportBtn.disabled = true;
+      stopExportBtn.disabled = false;
+      videoElement.currentTime = 0;
+      if (extraAudio.src) extraAudio.currentTime = 0;
+      await videoElement.play();
+      if (extraAudio.src) extraAudio.play().catch(() => {});
+    });
+
+    stopExportBtn.addEventListener('click', () => {
+      if (!recorder || recorder.state === 'inactive') return;
+      recorder.stop();
+      videoElement.pause();
+      extraAudio.pause();
+      stopExportBtn.disabled = true;
+    });
+
+    draw();
+  </script>
+</body>
+</html>
