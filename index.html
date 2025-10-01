@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>轻量剪辑工作室</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    body {
+      margin: 0;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      text-align: center;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      box-shadow: 0 15px 45px rgba(15, 23, 42, 0.12);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input[type="file"] {
+      padding: 12px;
+      background: #e5e7eb;
+      border: 1px dashed #9ca3af;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+
+    .emoji-picker {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+      gap: 8px;
+    }
+
+    .emoji-option {
+      font-size: 26px;
+      padding: 8px;
+      border-radius: 12px;
+      background: #f9fafb;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .emoji-option:hover {
+      transform: translateY(-2px) scale(1.05);
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+    }
+
+    .preview-wrapper {
+      position: relative;
+      background: #111827;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+      aspect-ratio: 16 / 9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+    }
+
+    canvas {
+      display: none;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .overlay .emoji {
+      position: absolute;
+      font-size: 48px;
+      cursor: move;
+      transform: translate(-50%, -50%);
+      user-select: none;
+      pointer-events: auto;
+      transition: transform 0.15s ease;
+    }
+
+    .emoji.selected {
+      filter: drop-shadow(0 8px 16px rgba(15, 23, 42, 0.25));
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button {
+      border: none;
+      padding: 12px 20px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 12px 30px rgba(99, 102, 241, 0.35);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    button:disabled {
+      background: #9ca3af;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    button:not(:disabled):hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 40px rgba(99, 102, 241, 0.45);
+    }
+
+    .status-log {
+      background: #111827;
+      color: #f9fafb;
+      padding: 16px;
+      border-radius: 12px;
+      min-height: 100px;
+      font-family: "Cascadia Code", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .sliders {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .slider-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+    }
+
+    @media (max-width: 1024px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-wrapper {
+        order: -1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>轻量剪辑工作室</h1>
+  <div class="workspace">
+    <section class="panel">
+      <h2>📁 素材导入</h2>
+      <label>
+        视频文件
+        <input id="videoInput" type="file" accept="video/*" />
+      </label>
+      <label>
+        伴奏音频
+        <input id="audioInput" type="file" accept="audio/*" />
+      </label>
+
+      <div class="sliders">
+        <div class="slider-group">
+          <span>音频音量：<span id="audioVolumeValue">100%</span></span>
+          <input id="audioVolume" type="range" min="0" max="1" step="0.01" value="1" />
+        </div>
+        <div class="slider-group">
+          <span>表情大小：<span id="emojiSizeValue">48px</span></span>
+          <input id="emojiSize" type="range" min="32" max="160" value="72" />
+        </div>
+      </div>
+
+      <h2>😀 表情贴纸</h2>
+      <div class="emoji-picker" id="emojiPicker"></div>
+    </section>
+
+    <section class="panel">
+      <h2>🎬 画面预览</h2>
+      <div class="preview-wrapper" id="previewWrapper">
+        <video id="video" controls playsinline></video>
+        <div class="overlay" id="overlay"></div>
+        <canvas id="canvas"></canvas>
+      </div>
+      <div class="controls">
+        <button id="playBtn" disabled>▶️ 播放预览</button>
+        <button id="pauseBtn" disabled>⏸ 暂停</button>
+        <button id="exportBtn" disabled>💾 导出 WebM</button>
+      </div>
+      <div class="status-log" id="statusLog">等待素材导入…</div>
+    </section>
+  </div>
+
+  <script>
+    const videoInput = document.getElementById('videoInput');
+    const audioInput = document.getElementById('audioInput');
+    const videoEl = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const canvas = document.getElementById('canvas');
+    const previewWrapper = document.getElementById('previewWrapper');
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const statusLog = document.getElementById('statusLog');
+    const emojiPicker = document.getElementById('emojiPicker');
+    const emojiSize = document.getElementById('emojiSize');
+    const emojiSizeValue = document.getElementById('emojiSizeValue');
+    const audioVolume = document.getElementById('audioVolume');
+    const audioVolumeValue = document.getElementById('audioVolumeValue');
+
+    const emojis = ['😂', '😍', '🔥', '👍', '🎉', '🥳', '🤔', '😎', '💯', '🤩', '🙌', '🧡', '🎵', '🎬', '✨', '🥰'];
+    const overlayItems = [];
+    let audioEl = null;
+    let selectedEmojiEl = null;
+
+    function log(message) {
+      const time = new Date().toLocaleTimeString();
+      statusLog.textContent = `[${time}] ${message}\n` + statusLog.textContent;
+    }
+
+    function setupEmojiPicker() {
+      emojiPicker.innerHTML = '';
+      emojis.forEach((emoji) => {
+        const btn = document.createElement('button');
+        btn.className = 'emoji-option';
+        btn.type = 'button';
+        btn.textContent = emoji;
+        btn.addEventListener('click', () => {
+          selectedEmojiEl?.classList.remove('selected');
+          selectedEmojiEl = null;
+          overlay.style.pointerEvents = 'auto';
+          overlay.dataset.pendingEmoji = emoji;
+          log(`点击预览画面即可放置表情 ${emoji}`);
+        });
+        emojiPicker.appendChild(btn);
+      });
+    }
+
+    function handleVideoImport(file) {
+      const url = URL.createObjectURL(file);
+      videoEl.src = url;
+      videoEl.addEventListener('loadedmetadata', () => {
+        videoEl.currentTime = 0;
+        playBtn.disabled = false;
+        pauseBtn.disabled = false;
+        exportBtn.disabled = false;
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        log(`已加载视频：${file.name}`);
+      }, { once: true });
+    }
+
+    function handleAudioImport(file) {
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.src = '';
+        audioEl = null;
+      }
+      audioEl = document.createElement('audio');
+      audioEl.src = URL.createObjectURL(file);
+      audioEl.loop = false;
+      audioEl.crossOrigin = 'anonymous';
+      audioEl.volume = audioVolume.value;
+      log(`已加载音频：${file.name}`);
+    }
+
+    function createOverlayEmoji(emoji, xRatio, yRatio) {
+      const div = document.createElement('div');
+      div.className = 'emoji';
+      div.textContent = emoji;
+      const size = Number(emojiSize.value);
+      div.style.fontSize = `${size}px`;
+      div.style.left = `${xRatio * 100}%`;
+      div.style.top = `${yRatio * 100}%`;
+      previewWrapper.appendChild(div);
+
+      const item = { div, emoji, xRatio, yRatio, size };
+      overlayItems.push(item);
+      enableEmojiDrag(item);
+      return item;
+    }
+
+    function enableEmojiDrag(item) {
+      let isDragging = false;
+      let pointerId = null;
+
+      const startDrag = (event) => {
+        event.preventDefault();
+        isDragging = true;
+        pointerId = event.pointerId;
+        item.div.setPointerCapture(pointerId);
+        selectedEmojiEl?.classList.remove('selected');
+        selectedEmojiEl = item.div;
+        selectedEmojiEl.classList.add('selected');
+      };
+
+      const moveDrag = (event) => {
+        if (!isDragging || event.pointerId !== pointerId) return;
+        const rect = previewWrapper.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width;
+        const y = (event.clientY - rect.top) / rect.height;
+        item.xRatio = Math.min(Math.max(x, 0.02), 0.98);
+        item.yRatio = Math.min(Math.max(y, 0.02), 0.98);
+        item.div.style.left = `${item.xRatio * 100}%`;
+        item.div.style.top = `${item.yRatio * 100}%`;
+      };
+
+      const endDrag = (event) => {
+        if (event.pointerId !== pointerId) return;
+        isDragging = false;
+        item.div.releasePointerCapture(pointerId);
+      };
+
+      item.div.addEventListener('pointerdown', startDrag);
+      item.div.addEventListener('pointermove', moveDrag);
+      item.div.addEventListener('pointerup', endDrag);
+      item.div.addEventListener('pointercancel', endDrag);
+    }
+
+    overlay.addEventListener('click', (event) => {
+      const emoji = overlay.dataset.pendingEmoji;
+      if (!emoji) return;
+      const rect = previewWrapper.getBoundingClientRect();
+      const xRatio = (event.clientX - rect.left) / rect.width;
+      const yRatio = (event.clientY - rect.top) / rect.height;
+      const item = createOverlayEmoji(emoji, xRatio, yRatio);
+      selectedEmojiEl = item.div;
+      selectedEmojiEl.classList.add('selected');
+      overlay.dataset.pendingEmoji = '';
+    });
+
+    emojiSize.addEventListener('input', () => {
+      const size = Number(emojiSize.value);
+      emojiSizeValue.textContent = `${size}px`;
+      if (selectedEmojiEl) {
+        selectedEmojiEl.style.fontSize = `${size}px`;
+        const item = overlayItems.find((i) => i.div === selectedEmojiEl);
+        if (item) item.size = size;
+      }
+    });
+
+    audioVolume.addEventListener('input', () => {
+      const value = Number(audioVolume.value);
+      audioVolumeValue.textContent = `${Math.round(value * 100)}%`;
+      if (audioEl) audioEl.volume = value;
+    });
+
+    playBtn.addEventListener('click', () => {
+      if (!videoEl.src) return;
+      videoEl.play();
+      audioEl?.play();
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      videoEl.pause();
+      audioEl?.pause();
+    });
+
+    async function exportVideo() {
+      if (!videoEl.srcObject && !videoEl.src) {
+        log('请先加载视频文件');
+        return;
+      }
+
+      const canvasCtx = canvas.getContext('2d');
+      const canvasStream = canvas.captureStream(30);
+      const combinedStream = new MediaStream();
+
+      canvasStream.getTracks().forEach((track) => combinedStream.addTrack(track));
+
+      let videoAudioStream = null;
+      if (videoEl.captureStream) {
+        videoAudioStream = videoEl.captureStream();
+      } else if (videoEl.mozCaptureStream) {
+        videoAudioStream = videoEl.mozCaptureStream();
+      }
+
+      if (videoAudioStream) {
+        videoAudioStream.getAudioTracks().forEach((track) => combinedStream.addTrack(track));
+      }
+
+      if (audioEl?.captureStream) {
+        const audioStream = audioEl.captureStream();
+        audioStream.getAudioTracks().forEach((track) => combinedStream.addTrack(track));
+      }
+
+      const recorder = new MediaRecorder(combinedStream, {
+        mimeType: 'video/webm;codecs=vp9,opus'
+      });
+      const chunks = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      const drawFrame = () => {
+        if (videoEl.paused || videoEl.ended) return;
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+        canvasCtx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        overlayItems.forEach((item) => {
+          const x = item.xRatio * canvas.width;
+          const y = item.yRatio * canvas.height;
+          canvasCtx.font = `${item.size}px system-ui`;
+          canvasCtx.textAlign = 'center';
+          canvasCtx.textBaseline = 'middle';
+          canvasCtx.fillText(item.emoji, x, y);
+        });
+        requestAnimationFrame(drawFrame);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `剪辑作品-${Date.now()}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+        log('导出完成 ✅');
+      };
+
+      log('开始导出，请耐心等待…');
+
+      videoEl.currentTime = 0;
+      videoEl.play();
+      if (audioEl) {
+        audioEl.currentTime = 0;
+        audioEl.play();
+      }
+
+      requestAnimationFrame(drawFrame);
+      recorder.start(100);
+
+      const stopRecording = () => {
+        if (recorder.state !== 'inactive') {
+          recorder.stop();
+        }
+        videoEl.removeEventListener('ended', stopRecording);
+      };
+
+      videoEl.addEventListener('ended', stopRecording);
+    }
+
+    exportBtn.addEventListener('click', () => {
+      exportVideo().catch((error) => {
+        console.error(error);
+        log(`导出失败：${error.message}`);
+      });
+    });
+
+    videoInput.addEventListener('change', (event) => {
+      const [file] = event.target.files;
+      if (file) {
+        handleVideoImport(file);
+      }
+    });
+
+    audioInput.addEventListener('change', (event) => {
+      const [file] = event.target.files;
+      if (file) {
+        handleAudioImport(file);
+      }
+    });
+
+    videoEl.addEventListener('ended', () => {
+      audioEl?.pause();
+      audioEl && (audioEl.currentTime = 0);
+    });
+
+    setupEmojiPicker();
+  </script>
+</body>
+</html>
