@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>方块世界冒险</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: #202428;
+        color: #f0f0f0;
+      }
+
+      #overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        background: rgba(12, 15, 18, 0.82);
+        z-index: 3;
+        padding: 2rem;
+        text-align: center;
+        transition: opacity 0.4s ease;
+      }
+
+      #overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #overlay button {
+        padding: 0.9rem 1.8rem;
+        font-size: 1.1rem;
+        border: none;
+        border-radius: 0.75rem;
+        background: linear-gradient(135deg, #2b9348, #55a630);
+        color: #fff;
+        box-shadow: 0 0.6rem 1.6rem rgba(0, 0, 0, 0.25);
+        cursor: pointer;
+      }
+
+      #overlay button:active {
+        transform: translateY(2px);
+      }
+
+      #crosshair {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 24px;
+        height: 24px;
+        margin-left: -12px;
+        margin-top: -12px;
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      #crosshair::before,
+      #crosshair::after {
+        content: "";
+        position: absolute;
+        background: rgba(255, 255, 255, 0.8);
+      }
+
+      #crosshair::before {
+        top: 11px;
+        left: 0;
+        right: 0;
+        height: 2px;
+      }
+
+      #crosshair::after {
+        left: 11px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+      }
+
+      #hud {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
+        text-align: right;
+        z-index: 2;
+        background: rgba(24, 29, 32, 0.45);
+        padding: 0.8rem 1rem;
+        border-radius: 0.75rem;
+        backdrop-filter: blur(6px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      #joystick {
+        position: fixed;
+        left: 1.2rem;
+        bottom: 1.2rem;
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: rgba(16, 20, 24, 0.42);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(6px);
+        display: none;
+        z-index: 2;
+        touch-action: none;
+      }
+
+      #joystickThumb {
+        position: absolute;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.25);
+        top: 32px;
+        left: 32px;
+        transition: transform 0.1s ease;
+        touch-action: none;
+      }
+
+      @media (max-width: 900px) {
+        #joystick {
+          display: block;
+        }
+
+        #hud {
+          font-size: 0.75rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay">
+      <h1>方块世界冒险</h1>
+      <p>
+        点击开始进入 3D 方块世界。电脑端支持鼠标+键盘，手机端支持触摸滑动和虚拟摇杆。
+      </p>
+      <button id="startButton">进入世界</button>
+      <div style="font-size: 0.85rem; opacity: 0.8; line-height: 1.6">
+        <div>电脑：WASD 移动，鼠标控制视角</div>
+        <div>手机：左下角摇杆移动，右侧滑动控制视角</div>
+      </div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="joystick">
+      <div id="joystickThumb"></div>
+    </div>
+    <div id="hud"></div>
+
+    <script type="module">
+      import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
+
+      const isTouch = matchMedia("(pointer: coarse)").matches;
+      const overlay = document.getElementById("overlay");
+      const startButton = document.getElementById("startButton");
+      const hud = document.getElementById("hud");
+      const joystick = document.getElementById("joystick");
+      const joystickThumb = document.getElementById("joystickThumb");
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87ceeb);
+
+      const camera = new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        500
+      );
+      camera.position.set(8, 12, 8);
+      camera.lookAt(0, 0, 0);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      document.body.appendChild(renderer.domElement);
+      renderer.domElement.style.touchAction = "none";
+      renderer.domElement.setAttribute("aria-label", "方块世界游戏画面");
+
+      const passiveFalse = { passive: false };
+
+      const ambientLight = new THREE.AmbientLight(0xfefefe, 0.6);
+      scene.add(ambientLight);
+      const sunLight = new THREE.DirectionalLight(0xffffff, 1.1);
+      sunLight.position.set(40, 60, 20);
+      sunLight.castShadow = true;
+      const mapSize = 1024;
+      sunLight.shadow.mapSize.set(mapSize, mapSize);
+      sunLight.shadow.camera.left = -60;
+      sunLight.shadow.camera.right = 60;
+      sunLight.shadow.camera.top = 60;
+      sunLight.shadow.camera.bottom = -60;
+      sunLight.shadow.camera.far = 150;
+      scene.add(sunLight);
+
+      const clock = new THREE.Clock();
+
+      const worldSize = 48;
+      const blockSize = 1;
+      const seed = 20240229;
+
+      function pseudoRandom(x, y) {
+        const s = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
+        return s - Math.floor(s);
+      }
+
+      function smoothNoise(x, y) {
+        const xf = Math.floor(x);
+        const yf = Math.floor(y);
+        let value = 0;
+        let total = 0;
+        const persistence = 0.55;
+        const octaves = 4;
+        for (let i = 0; i < octaves; i++) {
+          const frequency = Math.pow(2, i);
+          const amplitude = Math.pow(persistence, i);
+          const sampleX = xf / frequency;
+          const sampleY = yf / frequency;
+          const v = pseudoRandom(Math.floor(sampleX), Math.floor(sampleY));
+          value += v * amplitude;
+          total += amplitude;
+        }
+        return value / total;
+      }
+
+      function getHeight(x, z) {
+        const base = smoothNoise(x * 0.6, z * 0.6);
+        const hill = smoothNoise((x + 1000) * 0.25, (z + 1000) * 0.25);
+        const valley = smoothNoise((x - 800) * 0.15, (z - 800) * 0.15);
+        const height = base * 6 + hill * 8 - valley * 4;
+        return Math.floor(height);
+      }
+
+      const grassMaterial = new THREE.MeshLambertMaterial({ color: 0x5fa140 });
+      const dirtMaterial = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+      const stoneMaterial = new THREE.MeshLambertMaterial({ color: 0x808080 });
+      const waterMaterial = new THREE.MeshPhongMaterial({
+        color: 0x3d66cc,
+        transparent: true,
+        opacity: 0.85,
+        shininess: 80,
+      });
+
+      const blockGeometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+      const terrainGroup = new THREE.Group();
+      terrainGroup.receiveShadow = true;
+      scene.add(terrainGroup);
+
+      const groundLevel = -6;
+      const waterLevel = 1;
+
+      const maxBlocks = worldSize * worldSize * 6;
+      const grassMesh = new THREE.InstancedMesh(blockGeometry, grassMaterial, maxBlocks);
+      const dirtMesh = new THREE.InstancedMesh(blockGeometry, dirtMaterial, maxBlocks);
+      const stoneMesh = new THREE.InstancedMesh(blockGeometry, stoneMaterial, maxBlocks);
+      grassMesh.castShadow = grassMesh.receiveShadow = true;
+      dirtMesh.receiveShadow = true;
+      stoneMesh.receiveShadow = true;
+      let grassIndex = 0;
+      let dirtIndex = 0;
+      let stoneIndex = 0;
+
+      const dummy = new THREE.Object3D();
+
+      for (let x = -worldSize / 2; x < worldSize / 2; x++) {
+        for (let z = -worldSize / 2; z < worldSize / 2; z++) {
+          const height = getHeight(x, z);
+          for (let y = groundLevel; y <= height; y++) {
+            dummy.position.set(x * blockSize, y * blockSize, z * blockSize);
+            dummy.updateMatrix();
+            if (y === height) {
+              grassMesh.setMatrixAt(grassIndex++, dummy.matrix);
+            } else if (y > height - 3) {
+              dirtMesh.setMatrixAt(dirtIndex++, dummy.matrix);
+            } else {
+              stoneMesh.setMatrixAt(stoneIndex++, dummy.matrix);
+            }
+          }
+          if (height < waterLevel) {
+            const water = new THREE.Mesh(blockGeometry, waterMaterial);
+            water.position.set(x * blockSize, waterLevel * blockSize, z * blockSize);
+            water.receiveShadow = false;
+            water.castShadow = false;
+            terrainGroup.add(water);
+          }
+        }
+      }
+
+      grassMesh.count = grassIndex;
+      dirtMesh.count = dirtIndex;
+      stoneMesh.count = stoneIndex;
+      grassMesh.instanceMatrix.needsUpdate = true;
+      dirtMesh.instanceMatrix.needsUpdate = true;
+      stoneMesh.instanceMatrix.needsUpdate = true;
+      terrainGroup.add(grassMesh, dirtMesh, stoneMesh);
+
+      const skyGeo = new THREE.SphereGeometry(220, 32, 16);
+      const skyMat = new THREE.MeshBasicMaterial({
+        color: 0x87ceeb,
+        side: THREE.BackSide,
+      });
+      const sky = new THREE.Mesh(skyGeo, skyMat);
+      scene.add(sky);
+
+      const clouds = [];
+      const cloudGeometry = new THREE.BoxGeometry(4, 2, 2);
+      const cloudMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      for (let i = 0; i < 24; i++) {
+        const cloud = new THREE.Mesh(cloudGeometry, cloudMaterial);
+        cloud.position.set(
+          (Math.random() - 0.5) * worldSize * 2,
+          25 + Math.random() * 10,
+          (Math.random() - 0.5) * worldSize * 2
+        );
+        cloud.castShadow = true;
+        const scale = 0.7 + Math.random() * 1.3;
+        cloud.scale.set(scale * 2, scale, scale * 2.5);
+        scene.add(cloud);
+        clouds.push(cloud);
+      }
+
+      const movement = new THREE.Vector2();
+      const velocity = new THREE.Vector3();
+      const forward = new THREE.Vector3();
+      const sideways = new THREE.Vector3();
+
+      let yaw = Math.PI * 0.25;
+      let pitch = -0.3;
+
+      const keys = new Set();
+      window.addEventListener("keydown", (e) => {
+        if (e.repeat) return;
+        keys.add(e.code);
+      });
+      window.addEventListener("keyup", (e) => {
+        keys.delete(e.code);
+      });
+
+      let lookDelta = { x: 0, y: 0 };
+      let touchLookId = null;
+      let lastTouch = null;
+
+      function updateDesktopMovement() {
+        movement.set(0, 0);
+        if (keys.has("KeyW")) movement.y += 1;
+        if (keys.has("KeyS")) movement.y -= 1;
+        if (keys.has("KeyA")) movement.x -= 1;
+        if (keys.has("KeyD")) movement.x += 1;
+        if (movement.lengthSq() > 1) movement.normalize();
+      }
+
+      function applyMovement(delta) {
+        const speed = 7;
+        const flatForward = forward.clone();
+        flatForward.y = 0;
+        if (flatForward.lengthSq() === 0) {
+          flatForward.set(0, 0, 1);
+        }
+        flatForward.normalize();
+        sideways.copy(flatForward).cross(camera.up).normalize();
+
+        velocity.set(0, 0, 0);
+        velocity.addScaledVector(flatForward, movement.y * speed * delta);
+        velocity.addScaledVector(sideways, movement.x * speed * delta);
+        camera.position.add(velocity);
+      }
+
+      function clampToTerrain() {
+        const x = camera.position.x / blockSize;
+        const z = camera.position.z / blockSize;
+        const height = getHeight(Math.round(x), Math.round(z));
+        const ground = Math.max(height + 1.7, waterLevel + 0.6);
+        camera.position.y += (ground - camera.position.y) * 0.12;
+      }
+
+      function updateLook() {
+        const lookSpeed = isTouch ? 0.006 : 0.0024;
+        const dx = lookDelta.x;
+        const dy = lookDelta.y;
+        lookDelta.x = 0;
+        lookDelta.y = 0;
+        yaw -= dx * lookSpeed;
+        pitch -= dy * lookSpeed;
+        const maxPitch = Math.PI / 2 - 0.1;
+        pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
+
+        const cosPitch = Math.cos(pitch);
+        forward.set(
+          Math.sin(yaw) * cosPitch,
+          Math.sin(pitch),
+          Math.cos(yaw) * cosPitch
+        );
+        const target = camera.position.clone().add(forward);
+        camera.lookAt(target);
+      }
+
+      renderer.domElement.addEventListener("pointermove", (event) => {
+        if (event.pointerType === "mouse" && document.pointerLockElement) {
+          lookDelta.x += event.movementX;
+          lookDelta.y += event.movementY;
+        }
+      });
+
+      renderer.domElement.addEventListener("click", () => {
+        if (!isTouch) {
+          renderer.domElement.requestPointerLock();
+        }
+      });
+
+      renderer.domElement.addEventListener(
+        "touchstart",
+        (event) => {
+          event.preventDefault();
+          for (const touch of event.changedTouches) {
+            if (touch.clientX > window.innerWidth * 0.5 && touchLookId === null) {
+              touchLookId = touch.identifier;
+              lastTouch = { x: touch.clientX, y: touch.clientY };
+            }
+          }
+        },
+        passiveFalse
+      );
+
+      renderer.domElement.addEventListener(
+        "touchmove",
+        (event) => {
+          event.preventDefault();
+          for (const touch of event.changedTouches) {
+            if (touch.identifier === touchLookId) {
+              const dx = touch.clientX - lastTouch.x;
+              const dy = touch.clientY - lastTouch.y;
+              lookDelta.x += dx;
+              lookDelta.y += dy;
+              lastTouch = { x: touch.clientX, y: touch.clientY };
+            }
+          }
+        },
+        passiveFalse
+      );
+
+      renderer.domElement.addEventListener(
+        "touchend",
+        (event) => {
+          event.preventDefault();
+          for (const touch of event.changedTouches) {
+            if (touch.identifier === touchLookId) {
+              touchLookId = null;
+              lastTouch = null;
+            }
+          }
+        },
+        passiveFalse
+      );
+
+      const joystickState = {
+        active: false,
+        identifier: null,
+        center: { x: 0, y: 0 },
+      };
+
+      function updateJoystick(event) {
+        if (!joystickState.active) return;
+        let touch = null;
+        for (const t of event.touches) {
+          if (t.identifier === joystickState.identifier) {
+            touch = t;
+            break;
+          }
+        }
+        if (!touch) return;
+        const rect = joystick.getBoundingClientRect();
+        const x = touch.clientX - rect.left - rect.width / 2;
+        const y = touch.clientY - rect.top - rect.height / 2;
+        const maxDist = rect.width * 0.35;
+        const dist = Math.min(Math.hypot(x, y), maxDist);
+        const angle = Math.atan2(y, x);
+        const nx = Math.cos(angle) * dist;
+        const ny = Math.sin(angle) * dist;
+        joystickThumb.style.transform = `translate(${nx}px, ${ny}px)`;
+        movement.set(nx / maxDist, -ny / maxDist);
+      }
+
+      joystick.addEventListener(
+        "touchstart",
+        (event) => {
+          event.preventDefault();
+          const touch = event.changedTouches[0];
+          joystickState.active = true;
+          joystickState.identifier = touch.identifier;
+          updateJoystick(event);
+        },
+        passiveFalse
+      );
+
+      joystick.addEventListener(
+        "touchmove",
+        (event) => {
+          event.preventDefault();
+          updateJoystick(event);
+        },
+        passiveFalse
+      );
+
+      function resetJoystick() {
+        joystickState.active = false;
+        joystickState.identifier = null;
+        joystickThumb.style.transform = "translate(0px, 0px)";
+        movement.set(0, 0);
+      }
+
+      joystick.addEventListener(
+        "touchend",
+        (event) => {
+          event.preventDefault();
+          resetJoystick();
+        },
+        passiveFalse
+      );
+      joystick.addEventListener(
+        "touchcancel",
+        (event) => {
+          event.preventDefault();
+          resetJoystick();
+        },
+        passiveFalse
+      );
+
+      function updateHud(delta) {
+        const fps = (1 / delta).toFixed(0);
+        const pos = camera.position;
+        hud.innerHTML = `FPS: ${fps}<br/>X: ${pos.x.toFixed(1)} Y: ${pos.y.toFixed(
+          1
+        )} Z: ${pos.z.toFixed(1)}`;
+      }
+
+      let running = false;
+
+      function animate() {
+        if (!running) return;
+        const delta = Math.min(clock.getDelta(), 0.05);
+        if (!joystickState.active && !isTouch) {
+          updateDesktopMovement();
+        }
+        updateLook();
+        applyMovement(delta);
+        clampToTerrain();
+        clouds.forEach((cloud) => {
+          cloud.position.x += 0.3 * delta;
+          if (cloud.position.x > worldSize) cloud.position.x = -worldSize;
+        });
+        updateHud(delta);
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+
+      function startExperience() {
+        overlay.classList.add("hidden");
+        if (running) return;
+        running = true;
+        updateLook();
+        requestAnimationFrame(animate);
+      }
+
+      startButton.addEventListener("click", () => {
+        startExperience();
+      });
+
+      if (isTouch) {
+        joystick.style.display = "block";
+      }
+
+      window.addEventListener("resize", () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    </script>
+  </body>
+</html>
