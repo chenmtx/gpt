@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>立方世界 - Three.js</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100%;
+      width: 100%;
+      background: #87ceeb;
+      font-family: "Microsoft YaHei", sans-serif;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .overlay .panel {
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.4;
+      backdrop-filter: blur(8px);
+      max-width: 300px;
+    }
+
+    .crosshair {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 18px;
+      height: 18px;
+      margin-left: -9px;
+      margin-top: -9px;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.9);
+    }
+
+    .crosshair::before {
+      left: 50%;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      transform: translateX(-50%);
+    }
+
+    .crosshair::after {
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+
+    .touch-ui {
+      position: fixed;
+      bottom: 16px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 24px;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .joystick {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.35);
+      position: relative;
+      pointer-events: auto;
+      touch-action: none;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .joystick .stick {
+      width: 55px;
+      height: 55px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.55);
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      transition: transform 120ms ease;
+    }
+
+    .touch-button {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.45);
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      pointer-events: auto;
+      user-select: none;
+    }
+
+    .fps-counter {
+      position: fixed;
+      right: 12px;
+      top: 12px;
+      color: #fff;
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.45);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: "Consolas", "SFMono-Regular", monospace;
+      z-index: 6;
+    }
+
+    @media (min-width: 900px) {
+      .overlay .panel {
+        max-width: 400px;
+        font-size: 15px;
+      }
+
+      .joystick {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay">
+    <div class="panel">
+      <strong>操作提示</strong><br />
+      桌面端：点击画面进入鼠标锁定，使用 <kbd>WASD</kbd> 移动，鼠标滑动视角，空格跳跃，Shift 冲刺。<br />
+      移动端：拖动左侧摇杆移动，拖动右侧摇杆转动视角，点击「跳」键即可跳跃。
+    </div>
+  </div>
+  <div class="crosshair"></div>
+  <div class="fps-counter" id="fpsCounter">FPS: 0</div>
+  <div class="touch-ui">
+    <div class="joystick" id="movePad"><div class="stick"></div></div>
+    <div style="display:flex;align-items:center;gap:16px;pointer-events:none;">
+      <div class="touch-button" id="jumpButton">跳</div>
+      <div class="joystick" id="lookPad"><div class="stick"></div></div>
+    </div>
+  </div>
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 30, 180);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
+    camera.position.set(16, 15, 16);
+    camera.rotation.order = 'YXZ';
+
+    const ambientLight = new THREE.AmbientLight(0xb9d1ff, 0.55);
+    scene.add(ambientLight);
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+    sun.position.set(40, 60, 20);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 200;
+    sun.shadow.camera.left = -80;
+    sun.shadow.camera.right = 80;
+    sun.shadow.camera.top = 80;
+    sun.shadow.camera.bottom = -80;
+    scene.add(sun);
+
+    const skyGeometry = new THREE.SphereGeometry(250, 32, 32);
+    skyGeometry.scale(-1, 1, 1);
+    const skyMaterial = new THREE.MeshBasicMaterial({
+      map: createGradientTexture('#5db1ff', '#bde6ff'),
+      side: THREE.BackSide,
+      depthWrite: false
+    });
+    const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+    scene.add(sky);
+
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const blockSize = 1;
+    const chunkSize = 48;
+    const maxHeight = 18;
+
+    const textureLoader = new THREE.TextureLoader();
+
+    const textures = {
+      grassTop: textureLoader.load(makeTexture('grassTop')),
+      grassSide: textureLoader.load(makeTexture('grassSide')),
+      dirt: textureLoader.load(makeTexture('dirt')),
+      stone: textureLoader.load(makeTexture('stone')),
+      water: textureLoader.load(makeTexture('water'))
+    };
+    Object.values(textures).forEach(tex => {
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestMipMapLinearFilter;
+      tex.anisotropy = 4;
+    });
+
+    const blockGeometries = {
+      solid: new THREE.BoxGeometry(blockSize, blockSize, blockSize),
+      water: new THREE.BoxGeometry(blockSize, blockSize * 0.9, blockSize)
+    };
+
+    const blockMaterials = {
+      grass: [
+        new THREE.MeshLambertMaterial({ map: textures.grassSide }),
+        new THREE.MeshLambertMaterial({ map: textures.grassSide }),
+        new THREE.MeshLambertMaterial({ map: textures.grassTop }),
+        new THREE.MeshLambertMaterial({ map: textures.dirt }),
+        new THREE.MeshLambertMaterial({ map: textures.grassSide }),
+        new THREE.MeshLambertMaterial({ map: textures.grassSide })
+      ],
+      dirt: new THREE.MeshLambertMaterial({ map: textures.dirt }),
+      stone: new THREE.MeshLambertMaterial({ map: textures.stone }),
+      water: new THREE.MeshPhongMaterial({ map: textures.water, transparent: true, opacity: 0.75 })
+    };
+
+    const blockMeshes = {
+      grass: new THREE.Group(),
+      dirt: new THREE.InstancedMesh(blockGeometries.solid, blockMaterials.dirt, chunkSize * maxHeight * chunkSize),
+      stone: new THREE.InstancedMesh(blockGeometries.solid, blockMaterials.stone, chunkSize * maxHeight * chunkSize),
+      water: new THREE.InstancedMesh(blockGeometries.water, blockMaterials.water, chunkSize * chunkSize)
+    };
+
+    const grassGeometry = blockGeometries.solid.clone();
+    const grassMaterials = blockMaterials.grass;
+
+    blockMeshes.dirt.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    blockMeshes.stone.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    blockMeshes.water.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+    worldGroup.add(blockMeshes.dirt);
+    worldGroup.add(blockMeshes.stone);
+    worldGroup.add(blockMeshes.water);
+
+    const grassMeshList = [];
+
+    const matrix = new THREE.Matrix4();
+    let dirtIndex = 0;
+    let stoneIndex = 0;
+    let waterIndex = 0;
+
+    const baseHeight = 8;
+
+    function generateWorld() {
+      const heightMap = [];
+      for (let x = 0; x < chunkSize; x++) {
+        heightMap[x] = [];
+        for (let z = 0; z < chunkSize; z++) {
+          const height = Math.floor(baseHeight + terrainHeight(x, z));
+          heightMap[x][z] = Math.max(2, Math.min(maxHeight, height));
+        }
+      }
+
+      for (let x = 0; x < chunkSize; x++) {
+        for (let z = 0; z < chunkSize; z++) {
+          const height = heightMap[x][z];
+
+          for (let y = 0; y <= height; y++) {
+            const worldX = (x - chunkSize / 2) * blockSize;
+            const worldY = y * blockSize;
+            const worldZ = (z - chunkSize / 2) * blockSize;
+
+            if (y === height) {
+              const grassBlock = new THREE.Mesh(grassGeometry, grassMaterials);
+              grassBlock.position.set(worldX, worldY, worldZ);
+              grassBlock.receiveShadow = true;
+              grassBlock.castShadow = true;
+              grassMeshList.push(grassBlock);
+              worldGroup.add(grassBlock);
+            } else if (y >= height - 2) {
+              matrix.makeTranslation(worldX, worldY, worldZ);
+              blockMeshes.dirt.setMatrixAt(dirtIndex++, matrix);
+            } else {
+              matrix.makeTranslation(worldX, worldY, worldZ);
+              blockMeshes.stone.setMatrixAt(stoneIndex++, matrix);
+            }
+          }
+
+          const waterLevel = 9;
+          if (height < waterLevel) {
+            const y = waterLevel;
+            const worldX = (x - chunkSize / 2) * blockSize;
+            const worldY = (y - 0.1) * blockSize;
+            const worldZ = (z - chunkSize / 2) * blockSize;
+            matrix.makeTranslation(worldX, worldY, worldZ);
+            blockMeshes.water.setMatrixAt(waterIndex++, matrix);
+          }
+        }
+      }
+
+      blockMeshes.dirt.count = dirtIndex;
+      blockMeshes.dirt.instanceMatrix.needsUpdate = true;
+      blockMeshes.stone.count = stoneIndex;
+      blockMeshes.stone.instanceMatrix.needsUpdate = true;
+      blockMeshes.water.count = waterIndex;
+      blockMeshes.water.instanceMatrix.needsUpdate = true;
+
+      grassMeshList.forEach(mesh => {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      });
+    }
+
+    function terrainHeight(x, z) {
+      const nx = x / chunkSize - 0.5;
+      const nz = z / chunkSize - 0.5;
+      const elevation = layeredNoise(nx, nz);
+      return elevation * maxHeight * 0.6;
+    }
+
+    function layeredNoise(x, z) {
+      const frequencies = [1, 2.2, 4.6];
+      const amplitudes = [1, 0.45, 0.25];
+      let value = 0;
+      let total = 0;
+      for (let i = 0; i < frequencies.length; i++) {
+        const freq = frequencies[i];
+        const amp = amplitudes[i];
+        value += smoothNoise(x * freq, z * freq) * amp;
+        total += amp;
+      }
+      return value / total;
+    }
+
+    function smoothNoise(x, z) {
+      const s = Math.sin;
+      const c = Math.cos;
+      return (s(x * Math.PI) + c(z * Math.PI) + s((x + z) * Math.PI * 0.5)) / 3;
+    }
+
+    function createGradientTexture(topColor, bottomColor) {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, 0, size);
+      gradient.addColorStop(0, topColor);
+      gradient.addColorStop(1, bottomColor);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 1, size);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.magFilter = THREE.LinearFilter;
+      texture.minFilter = THREE.LinearFilter;
+      return texture;
+    }
+
+    function makeTexture(type) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+
+      const colors = {
+        grassTop: ['#3e7328', '#4f8a30', '#396322', '#588736'],
+        grassSide: ['#2d581c', '#467730', '#5e8d3f', '#3e6129'],
+        dirt: ['#5d3c14', '#6c441a', '#71491c', '#4c2f10'],
+        stone: ['#8b8f92', '#6d7275', '#7b7f82', '#5b5f62'],
+        water: ['#2a6db5', '#1f5a99', '#1a4f89', '#3379c4']
+      };
+
+      const palette = colors[type];
+      for (let y = 0; y < 32; y++) {
+        for (let x = 0; x < 32; x++) {
+          const idx = Math.floor(Math.random() * palette.length);
+          ctx.fillStyle = palette[idx];
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      if (type === 'grassTop') {
+        ctx.fillStyle = '#2d4d1d';
+        ctx.fillRect(0, 0, 32, 4);
+      }
+
+      if (type === 'grassSide') {
+        ctx.fillStyle = '#5b3b15';
+        ctx.fillRect(0, 20, 32, 12);
+      }
+
+      if (type === 'water') {
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = '#ffffff';
+        for (let i = 0; i < 12; i++) {
+          ctx.beginPath();
+          const cx = Math.random() * 32;
+          const cy = Math.random() * 32;
+          const radius = Math.random() * 6 + 2;
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      return canvas.toDataURL('image/png');
+    }
+
+    generateWorld();
+
+    const planeGeometry = new THREE.PlaneGeometry(chunkSize * blockSize, chunkSize * blockSize, 1, 1);
+    const planeMaterial = new THREE.MeshLambertMaterial({ color: 0x476f2c });
+    const ground = new THREE.Mesh(planeGeometry, planeMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    ground.position.y = -0.51;
+    worldGroup.add(ground);
+
+    const waterMaterial = new THREE.MeshPhongMaterial({
+      color: 0x3a78c5,
+      transparent: true,
+      opacity: 0.35,
+      shininess: 40
+    });
+    const lake = new THREE.Mesh(planeGeometry, waterMaterial);
+    lake.rotation.x = -Math.PI / 2;
+    lake.position.y = 9 * blockSize;
+    lake.receiveShadow = false;
+    scene.add(lake);
+
+    const clock = new THREE.Clock();
+
+    let yaw = Math.PI / 4;
+    let pitch = -0.25;
+
+    let velocityY = 0;
+    const gravity = -25;
+    const jumpSpeed = 8;
+    let isJumping = false;
+    let onGround = true;
+
+    const moveState = {
+      forward: 0,
+      backward: 0,
+      left: 0,
+      right: 0,
+      sprint: false
+    };
+
+    const keys = {};
+
+    window.addEventListener('keydown', (event) => {
+      keys[event.code] = true;
+      if (event.code === 'Space') {
+        attemptJump();
+      }
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        moveState.sprint = true;
+      }
+    });
+
+    window.addEventListener('keyup', (event) => {
+      keys[event.code] = false;
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        moveState.sprint = false;
+      }
+    });
+
+    function attemptJump() {
+      if (onGround) {
+        velocityY = jumpSpeed;
+        isJumping = true;
+        onGround = false;
+      }
+    }
+
+    const jumpButton = document.getElementById('jumpButton');
+    jumpButton.addEventListener('touchstart', (event) => {
+      event.preventDefault();
+      attemptJump();
+    }, { passive: false });
+    jumpButton.addEventListener('touchmove', (event) => event.preventDefault(), { passive: false });
+    jumpButton.addEventListener('touchend', (event) => event.preventDefault(), { passive: false });
+
+    const mouse = {
+      isLocked: false,
+      sensitivity: 0.0022
+    };
+
+    renderer.domElement.addEventListener('click', () => {
+      if (!isMobile()) {
+        renderer.domElement.requestPointerLock();
+      }
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      mouse.isLocked = document.pointerLockElement === renderer.domElement;
+    });
+
+    renderer.domElement.addEventListener('mousemove', (event) => {
+      if (!mouse.isLocked) return;
+      yaw -= event.movementX * mouse.sensitivity;
+      pitch -= event.movementY * mouse.sensitivity;
+      clampPitch();
+    });
+
+    function clampPitch() {
+      const maxPitch = Math.PI / 2 - 0.05;
+      pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
+    }
+
+    class VirtualJoystick {
+      constructor(container) {
+        this.container = container;
+        this.stick = container.querySelector('.stick');
+        this.active = false;
+        this.touchId = null;
+        this.value = { x: 0, y: 0 };
+        this.maxRadius = container.clientWidth * 0.5;
+        this._bind();
+      }
+
+      _bind() {
+        this.container.addEventListener('touchstart', (e) => this._start(e), { passive: false });
+        this.container.addEventListener('touchmove', (e) => this._move(e), { passive: false });
+        this.container.addEventListener('touchend', (e) => this._end(e), { passive: false });
+        this.container.addEventListener('touchcancel', (e) => this._end(e), { passive: false });
+      }
+
+      _start(event) {
+        event.preventDefault();
+        const touch = event.changedTouches[0];
+        this.active = true;
+        this.touchId = touch.identifier;
+        this.updateStick(touch.clientX, touch.clientY);
+      }
+
+      _move(event) {
+        if (!this.active) return;
+        const touch = this._findTouch(event.changedTouches);
+        if (!touch) return;
+        event.preventDefault();
+        this.updateStick(touch.clientX, touch.clientY);
+      }
+
+      _end(event) {
+        const touch = this._findTouch(event.changedTouches);
+        if (!touch) return;
+        event.preventDefault();
+        this.active = false;
+        this.touchId = null;
+        this.value = { x: 0, y: 0 };
+        this.stick.style.transition = 'transform 120ms ease';
+        this.stick.style.transform = 'translate(-50%, -50%)';
+      }
+
+      _findTouch(touchList) {
+        for (let i = 0; i < touchList.length; i++) {
+          if (touchList[i].identifier === this.touchId) {
+            return touchList[i];
+          }
+        }
+        return null;
+      }
+
+      updateStick(clientX, clientY) {
+        const rect = this.container.getBoundingClientRect();
+        const offsetX = clientX - (rect.left + rect.width / 2);
+        const offsetY = clientY - (rect.top + rect.height / 2);
+        const distance = Math.min(Math.hypot(offsetX, offsetY), this.maxRadius);
+        const angle = Math.atan2(offsetY, offsetX);
+        const x = Math.cos(angle) * distance;
+        const y = Math.sin(angle) * distance;
+        this.value = { x: x / this.maxRadius, y: y / this.maxRadius };
+        this.stick.style.transition = 'none';
+        this.stick.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+      }
+
+      getValue() {
+        return this.value;
+      }
+    }
+
+    const moveJoystick = new VirtualJoystick(document.getElementById('movePad'));
+    const lookJoystick = new VirtualJoystick(document.getElementById('lookPad'));
+
+    let previousTime = performance.now();
+    let frameCount = 0;
+    let fps = 0;
+    const fpsCounter = document.getElementById('fpsCounter');
+
+    function updateFPS(now) {
+      frameCount++;
+      const delta = now - previousTime;
+      if (delta >= 1000) {
+        fps = Math.round((frameCount * 1000) / delta);
+        fpsCounter.textContent = `FPS: ${fps}`;
+        frameCount = 0;
+        previousTime = now;
+      }
+    }
+
+    function updateMovement(delta) {
+      moveState.forward = keys['KeyW'] ? 1 : 0;
+      moveState.backward = keys['KeyS'] ? 1 : 0;
+      moveState.left = keys['KeyA'] ? 1 : 0;
+      moveState.right = keys['KeyD'] ? 1 : 0;
+
+      const moveInput = moveJoystick.getValue();
+      moveState.forward += Math.max(0, -moveInput.y);
+      moveState.backward += Math.max(0, moveInput.y);
+      moveState.left += Math.max(0, -moveInput.x);
+      moveState.right += Math.max(0, moveInput.x);
+
+      const lookInput = lookJoystick.getValue();
+      if (Math.abs(lookInput.x) > 0.05 || Math.abs(lookInput.y) > 0.05) {
+        yaw -= lookInput.x * delta * 1.8;
+        pitch -= lookInput.y * delta * 1.5;
+        clampPitch();
+      }
+
+      let moveX = moveState.right - moveState.left;
+      let moveZ = moveState.backward - moveState.forward;
+
+      const length = Math.hypot(moveX, moveZ);
+      if (length > 0) {
+        moveX /= length;
+        moveZ /= length;
+      }
+
+      const moveSpeed = moveState.sprint ? 7 : 4.2;
+      const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+      const right = new THREE.Vector3(Math.sin(yaw + Math.PI / 2), 0, Math.cos(yaw + Math.PI / 2));
+
+      const displacement = new THREE.Vector3();
+      displacement.addScaledVector(forward, -moveZ * moveSpeed * delta);
+      displacement.addScaledVector(right, moveX * moveSpeed * delta);
+
+      velocityY += gravity * delta;
+      if (isJumping) {
+        velocityY += gravity * delta * 0.5;
+      }
+
+      displacement.y = velocityY * delta;
+
+      const nextPosition = camera.position.clone().add(displacement);
+
+      const groundHeight = getGroundHeight(nextPosition.x / blockSize + chunkSize / 2, nextPosition.z / blockSize + chunkSize / 2);
+      const currentGroundLevel = groundHeight * blockSize + blockSize * 1.5;
+
+      if (nextPosition.y <= currentGroundLevel) {
+        nextPosition.y = currentGroundLevel;
+        velocityY = 0;
+        isJumping = false;
+        onGround = true;
+      } else {
+        onGround = false;
+      }
+
+      camera.position.copy(nextPosition);
+    }
+
+    function getGroundHeight(x, z) {
+      const ix = Math.floor(THREE.MathUtils.clamp(x, 0, chunkSize - 1));
+      const iz = Math.floor(THREE.MathUtils.clamp(z, 0, chunkSize - 1));
+      const height = baseHeight + terrainHeight(ix, iz);
+      return Math.max(2, Math.min(maxHeight, Math.floor(height)));
+    }
+
+    function renderLoop(now) {
+      requestAnimationFrame(renderLoop);
+      const delta = clock.getDelta();
+      updateFPS(now);
+      updateMovement(delta);
+
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+
+      const waterOffset = (Math.sin(now * 0.0005) + 1) * 0.02;
+      lake.material.opacity = 0.35 + waterOffset * 0.1;
+
+      renderer.render(scene, camera);
+    }
+
+    renderLoop(performance.now());
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+
+    function isMobile() {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
+
+    if (isMobile()) {
+      document.body.classList.add('mobile');
+    }
+  </script>
+</body>
+</html>
