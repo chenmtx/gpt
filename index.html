@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>方块世界 3D</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="loading">正在生成方块世界...</div>
+    <canvas id="scene"></canvas>
+    <div id="hud">
+      <div id="logo">方块世界 3D</div>
+      <div id="tips">
+        <p>键盘：WASD移动，空格跳跃，拖动屏幕旋转视角</p>
+        <p>手机：使用左侧摇杆移动，右侧滑动视角，点击跳跃按钮</p>
+      </div>
+    </div>
+    <div id="controls">
+      <div id="joystick">
+        <div id="stick"></div>
+      </div>
+      <div id="lookPad"></div>
+      <button id="jumpBtn">跳跃</button>
+    </div>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

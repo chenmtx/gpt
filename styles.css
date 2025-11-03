@@ -1,0 +1,117 @@
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #9fd4ff;
+  overflow: hidden;
+  font-family: "Nunito", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+#scene {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+#loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 51, 89, 0.85);
+  color: #fff;
+  font-size: 1.2rem;
+  letter-spacing: 0.1em;
+  z-index: 20;
+}
+
+#hud {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  z-index: 10;
+}
+
+#logo {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+#tips {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-width: 260px;
+}
+
+#controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+}
+
+#joystick {
+  position: absolute;
+  left: 5vw;
+  bottom: 12vh;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#stick {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  left: calc(50% - 28px);
+  top: calc(50% - 28px);
+  background: rgba(255, 255, 255, 0.8);
+  transition: transform 0.1s ease-out;
+}
+
+#lookPad {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 50vw;
+  height: 60vh;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#jumpBtn {
+  position: absolute;
+  right: 5vw;
+  bottom: 12vh;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  font-size: 1rem;
+  font-weight: bold;
+  color: #14324d;
+  background: rgba(255, 255, 255, 0.85);
+  pointer-events: auto;
+  touch-action: manipulation;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+@media (min-width: 960px) {
+  #controls {
+    display: none;
+  }
+}
