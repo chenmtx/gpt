@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>三维方块世界</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: "Segoe UI", Roboto, sans-serif;
+        background: #87ceeb;
+      }
+      canvas {
+        display: block;
+        touch-action: none;
+      }
+      #overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+      }
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 24px;
+        height: 24px;
+        margin-left: -12px;
+        margin-top: -12px;
+        border: 2px solid rgba(255, 255, 255, 0.7);
+        border-radius: 50%;
+      }
+      .hud {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 16px;
+        padding: 6px 12px;
+        background: rgba(0, 0, 0, 0.35);
+        color: #fff;
+        border-radius: 12px;
+        font-size: 14px;
+        letter-spacing: 1px;
+        pointer-events: none;
+      }
+      #mobile-ui {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      .joystick {
+        position: absolute;
+        bottom: 24px;
+        left: 24px;
+        width: 120px;
+        height: 120px;
+        border-radius: 60px;
+        background: rgba(0, 0, 0, 0.25);
+        pointer-events: auto;
+        touch-action: none;
+      }
+      .joystick .knob {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 60px;
+        height: 60px;
+        margin-left: -30px;
+        margin-top: -30px;
+        border-radius: 30px;
+        background: rgba(255, 255, 255, 0.5);
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+      }
+      .actions {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        pointer-events: auto;
+      }
+      .action-btn {
+        width: 76px;
+        height: 76px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.75);
+        color: #222;
+        font-weight: bold;
+        font-size: 15px;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.3);
+        touch-action: none;
+      }
+      .action-btn:active {
+        transform: scale(0.96);
+        background: rgba(255, 255, 255, 0.9);
+      }
+      @media (hover: hover) {
+        #mobile-ui {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay">
+      <div id="crosshair"></div>
+      <div class="hud">点击屏幕移动视角，打破方块或放置方块。</div>
+    </div>
+    <div id="mobile-ui">
+      <div class="joystick" id="joystick">
+        <div class="knob" id="joystickKnob"></div>
+      </div>
+      <div class="actions">
+        <button class="action-btn" id="jumpBtn">跳跃</button>
+        <button class="action-btn" id="breakBtn">破坏</button>
+        <button class="action-btn" id="placeBtn">放置</button>
+      </div>
+    </div>
+    <script type="module">
+      import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.159/build/three.module.js";
+
+      const isTouch = "ontouchstart" in window;
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87ceeb);
+
+      const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(8, 12, 8);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      scene.add(ambientLight);
+
+      const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+      sun.position.set(50, 80, 30);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.camera.near = 0.5;
+      sun.shadow.camera.far = 500;
+      scene.add(sun);
+
+      const blockSize = 1;
+      const worldWidth = 40;
+      const worldDepth = 40;
+      const worldHeight = 32;
+
+      const blockGeometry = new THREE.BoxGeometry(blockSize, blockSize, blockSize);
+
+      function createBlockTexture(baseColor, topColor, edgeColor) {
+        const size = 64;
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext("2d");
+
+        ctx.fillStyle = topColor;
+        ctx.fillRect(0, 0, size, size);
+        const cell = 8;
+        for (let y = 0; y < size; y += cell) {
+          for (let x = 0; x < size; x += cell) {
+            ctx.fillStyle = Math.random() > 0.5 ? baseColor : edgeColor;
+            ctx.fillRect(x, y, cell, cell);
+          }
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.NearestMipMapNearestFilter;
+        return texture;
+      }
+
+      const textures = {
+        grass: createBlockTexture("#688b33", "#7ec850", "#4d6b1f"),
+        dirt: createBlockTexture("#8a5a2b", "#956436", "#704323"),
+        stone: createBlockTexture("#8b8b8b", "#9c9c9c", "#6e6e6e"),
+        wood: createBlockTexture("#a97742", "#c08c54", "#80552b"),
+      };
+
+      const materials = {
+        grass: new THREE.MeshLambertMaterial({ map: textures.grass }),
+        dirt: new THREE.MeshLambertMaterial({ map: textures.dirt }),
+        stone: new THREE.MeshLambertMaterial({ map: textures.stone }),
+        wood: new THREE.MeshLambertMaterial({ map: textures.wood }),
+      };
+
+      const blocksGroup = new THREE.Group();
+      blocksGroup.castShadow = true;
+      blocksGroup.receiveShadow = true;
+      scene.add(blocksGroup);
+
+      const blockMap = new Map();
+      const columnData = new Map();
+      const blockTypes = ["stone", "dirt", "grass"];
+
+      function blockKey(x, y, z) {
+        return `${x},${y},${z}`;
+      }
+
+      function columnKey(x, z) {
+        return `${x},${z}`;
+      }
+
+      function getColumn(x, z) {
+        const key = columnKey(x, z);
+        if (!columnData.has(key)) {
+          columnData.set(key, { levels: new Set(), max: -Infinity });
+        }
+        return columnData.get(key);
+      }
+
+      function updateColumnMax(col) {
+        let max = -Infinity;
+        for (const level of col.levels) {
+          if (level > max) max = level;
+        }
+        col.max = max;
+      }
+
+      function addBlock(x, y, z, type = "grass") {
+        if (blockMap.has(blockKey(x, y, z))) return;
+        const material = materials[type] || materials.grass;
+        const mesh = new THREE.Mesh(blockGeometry, material);
+        mesh.position.set(x * blockSize, y * blockSize, z * blockSize);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = { x, y, z, type };
+        blocksGroup.add(mesh);
+        blockMap.set(blockKey(x, y, z), mesh);
+
+        const col = getColumn(x, z);
+        col.levels.add(y);
+        if (y > col.max) col.max = y;
+      }
+
+      function removeBlock(x, y, z) {
+        const key = blockKey(x, y, z);
+        const mesh = blockMap.get(key);
+        if (!mesh) return;
+        blocksGroup.remove(mesh);
+        blockMap.delete(key);
+
+        const col = getColumn(x, z);
+        col.levels.delete(y);
+        if (y >= col.max) {
+          updateColumnMax(col);
+        }
+      }
+
+      function getHighestBlockY(x, z) {
+        const col = columnData.get(columnKey(x, z));
+        if (!col) return -Infinity;
+        return col.max;
+      }
+
+      function pseudoNoise(x, z) {
+        const n = Math.sin(x * 0.24 + z * 0.14) + Math.cos(z * 0.31) + Math.sin(x * 0.11 + z * 0.07);
+        return n * 0.6;
+      }
+
+      function buildWorld() {
+        const halfW = Math.floor(worldWidth / 2);
+        const halfD = Math.floor(worldDepth / 2);
+        for (let x = -halfW; x < halfW; x++) {
+          for (let z = -halfD; z < halfD; z++) {
+            const height = Math.floor(6 + pseudoNoise(x, z) * 4);
+            for (let y = 0; y <= height; y++) {
+              let type = "dirt";
+              if (y === height) type = "grass";
+              else if (y < height - 2) type = "stone";
+              addBlock(x, y, z, type);
+            }
+            if (Math.random() > 0.985 && height > 4) {
+              generateTree(x, height + 1, z);
+            }
+          }
+        }
+      }
+
+      function generateTree(x, y, z) {
+        for (let i = 0; i < 4; i++) {
+          addBlock(x, y + i, z, "wood");
+        }
+        for (let dx = -2; dx <= 2; dx++) {
+          for (let dz = -2; dz <= 2; dz++) {
+            for (let dy = 3; dy <= 5; dy++) {
+              if (Math.abs(dx) + Math.abs(dz) + (dy === 5 ? 1 : 0) < 5) {
+                addBlock(x + dx, y + dy, z + dz, "grass");
+              }
+            }
+          }
+        }
+      }
+
+      buildWorld();
+
+      const player = {
+        position: new THREE.Vector3(0, 20, 0),
+        velocity: new THREE.Vector3(),
+        direction: new THREE.Vector3(),
+        yaw: Math.PI / 4,
+        pitch: -0.25,
+        height: 1.7,
+      };
+
+      const gravity = 24;
+      const moveSpeed = 10;
+      const jumpImpulse = 10;
+      let canJump = false;
+
+      function updateCameraRotation() {
+        const euler = new THREE.Euler(player.pitch, player.yaw, 0, "YXZ");
+        camera.quaternion.setFromEuler(euler);
+      }
+
+      function updateCameraPosition() {
+        camera.position.copy(player.position);
+        camera.position.y += player.height;
+      }
+
+      updateCameraRotation();
+      updateCameraPosition();
+
+      const keyState = { forward: false, back: false, left: false, right: false };
+
+      function onKeyDown(event) {
+        switch (event.code) {
+          case "KeyW":
+          case "ArrowUp":
+            keyState.forward = true;
+            break;
+          case "KeyS":
+          case "ArrowDown":
+            keyState.back = true;
+            break;
+          case "KeyA":
+          case "ArrowLeft":
+            keyState.left = true;
+            break;
+          case "KeyD":
+          case "ArrowRight":
+            keyState.right = true;
+            break;
+          case "Space":
+            attemptJump();
+            break;
+        }
+      }
+
+      function onKeyUp(event) {
+        switch (event.code) {
+          case "KeyW":
+          case "ArrowUp":
+            keyState.forward = false;
+            break;
+          case "KeyS":
+          case "ArrowDown":
+            keyState.back = false;
+            break;
+          case "KeyA":
+          case "ArrowLeft":
+            keyState.left = false;
+            break;
+          case "KeyD":
+          case "ArrowRight":
+            keyState.right = false;
+            break;
+        }
+      }
+
+      document.addEventListener("keydown", onKeyDown);
+      document.addEventListener("keyup", onKeyUp);
+
+      function attemptJump() {
+        if (canJump) {
+          player.velocity.y = jumpImpulse;
+          canJump = false;
+        }
+      }
+
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2();
+
+      function pickBlock(maxDistance = 6) {
+        pointer.set(0, 0);
+        raycaster.setFromCamera(pointer, camera);
+        const intersects = raycaster.intersectObjects(blocksGroup.children, false);
+        if (intersects.length === 0) return null;
+        const hit = intersects[0];
+        if (hit.distance > maxDistance) return null;
+        const mesh = hit.object;
+        const normal = hit.face.normal.clone();
+        normal.applyQuaternion(mesh.quaternion);
+        return { mesh, normal };
+      }
+
+      function breakBlock() {
+        const hit = pickBlock();
+        if (!hit) return;
+        const { x, y, z } = hit.mesh.userData;
+        removeBlock(x, y, z);
+      }
+
+      function placeBlock() {
+        const hit = pickBlock();
+        if (!hit) return;
+        const target = hit.mesh.userData;
+        const normal = hit.normal;
+        const newX = target.x + normal.x;
+        const newY = target.y + normal.y;
+        const newZ = target.z + normal.z;
+        const distance = player.position.distanceTo(new THREE.Vector3(newX, newY, newZ));
+        if (distance < 1.5) return;
+        addBlock(newX, newY, newZ, "grass");
+      }
+
+      renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
+      renderer.domElement.addEventListener("mousedown", (event) => {
+        if (isTouch) return;
+        switch (event.button) {
+          case 0:
+            breakBlock();
+            break;
+          case 2:
+            placeBlock();
+            break;
+        }
+      });
+
+      renderer.domElement.addEventListener("click", () => {
+        if (!isTouch && document.pointerLockElement !== renderer.domElement) {
+          renderer.domElement.requestPointerLock();
+        }
+      });
+
+      document.addEventListener("pointerlockchange", () => {
+        if (document.pointerLockElement === renderer.domElement) {
+          document.addEventListener("mousemove", onPointerMove);
+        } else {
+          document.removeEventListener("mousemove", onPointerMove);
+        }
+      });
+
+      function onPointerMove(event) {
+        const sensitivity = 0.0025;
+        player.yaw -= event.movementX * sensitivity;
+        player.pitch -= event.movementY * sensitivity;
+        player.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, player.pitch));
+        updateCameraRotation();
+      }
+
+      // Touch controls for look
+      if (isTouch) {
+        let lookTouchId = null;
+        let lastLookPosition = null;
+
+        renderer.domElement.addEventListener("touchstart", (event) => {
+          for (const touch of event.changedTouches) {
+            if (touch.clientX > window.innerWidth / 2 && lookTouchId === null) {
+              lookTouchId = touch.identifier;
+              lastLookPosition = { x: touch.clientX, y: touch.clientY };
+            }
+          }
+        });
+
+        renderer.domElement.addEventListener("touchmove", (event) => {
+          for (const touch of event.changedTouches) {
+            if (touch.identifier === lookTouchId) {
+              const dx = touch.clientX - lastLookPosition.x;
+              const dy = touch.clientY - lastLookPosition.y;
+              const sensitivity = 0.0045;
+              player.yaw -= dx * sensitivity;
+              player.pitch -= dy * sensitivity;
+              player.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, player.pitch));
+              updateCameraRotation();
+              lastLookPosition = { x: touch.clientX, y: touch.clientY };
+              event.preventDefault();
+            }
+          }
+        }, { passive: false });
+
+        renderer.domElement.addEventListener("touchend", (event) => {
+          for (const touch of event.changedTouches) {
+            if (touch.identifier === lookTouchId) {
+              lookTouchId = null;
+              lastLookPosition = null;
+            }
+          }
+        });
+      }
+
+      // Mobile UI actions
+      const jumpBtn = document.getElementById("jumpBtn");
+      const breakBtn = document.getElementById("breakBtn");
+      const placeBtn = document.getElementById("placeBtn");
+
+      jumpBtn?.addEventListener("touchstart", (event) => {
+        event.preventDefault();
+        attemptJump();
+      });
+      breakBtn?.addEventListener("touchstart", (event) => {
+        event.preventDefault();
+        breakBlock();
+      });
+      placeBtn?.addEventListener("touchstart", (event) => {
+        event.preventDefault();
+        placeBlock();
+      });
+
+      // Joystick handling
+      const joystick = document.getElementById("joystick");
+      const joystickKnob = document.getElementById("joystickKnob");
+      let joystickTouchId = null;
+      let joystickVector = new THREE.Vector2();
+
+      function resetJoystick() {
+        joystickVector.set(0, 0);
+        joystickKnob.style.transform = "translate(-50%, -50%)";
+      }
+
+      if (joystick) {
+        const rect = () => joystick.getBoundingClientRect();
+
+        const handleJoystickMove = (touch) => {
+          const bounds = rect();
+          const centerX = bounds.left + bounds.width / 2;
+          const centerY = bounds.top + bounds.height / 2;
+          const dx = touch.clientX - centerX;
+          const dy = touch.clientY - centerY;
+          const maxRadius = bounds.width / 2;
+          const distance = Math.min(Math.sqrt(dx * dx + dy * dy), maxRadius);
+          const angle = Math.atan2(dy, dx);
+          const normalizedX = (distance / maxRadius) * Math.cos(angle);
+          const normalizedY = (distance / maxRadius) * Math.sin(angle);
+          joystickVector.set(normalizedX, normalizedY);
+          const knobX = normalizedX * maxRadius * 0.6;
+          const knobY = normalizedY * maxRadius * 0.6;
+          joystickKnob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
+        };
+
+        joystick.addEventListener("touchstart", (event) => {
+          event.preventDefault();
+          if (joystickTouchId !== null) return;
+          const touch = event.changedTouches[0];
+          joystickTouchId = touch.identifier;
+          handleJoystickMove(touch);
+        }, { passive: false });
+
+        joystick.addEventListener("touchmove", (event) => {
+          for (const touch of event.changedTouches) {
+            if (touch.identifier === joystickTouchId) {
+              event.preventDefault();
+              handleJoystickMove(touch);
+            }
+          }
+        }, { passive: false });
+
+        const endHandler = (event) => {
+          for (const touch of event.changedTouches) {
+            if (touch.identifier === joystickTouchId) {
+              event.preventDefault();
+              joystickTouchId = null;
+              resetJoystick();
+            }
+          }
+        };
+
+        joystick.addEventListener("touchend", endHandler);
+        joystick.addEventListener("touchcancel", endHandler);
+      }
+
+      const clock = new THREE.Clock();
+
+      function getMovementVector() {
+        const vector = new THREE.Vector3();
+        if (isTouch) {
+          vector.x = joystickVector.x;
+          vector.z = joystickVector.y;
+        } else {
+          vector.z = (keyState.back ? 1 : 0) - (keyState.forward ? 1 : 0);
+          vector.x = (keyState.right ? 1 : 0) - (keyState.left ? 1 : 0);
+        }
+        if (vector.lengthSq() > 0) {
+          vector.normalize();
+        }
+        return vector;
+      }
+
+      function updateMovement(delta) {
+        const moveVector = getMovementVector();
+        const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+        const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+        const wishDir = new THREE.Vector3();
+        wishDir.addScaledVector(forward, -moveVector.z);
+        wishDir.addScaledVector(right, moveVector.x);
+
+        if (wishDir.lengthSq() > 0) {
+          wishDir.normalize();
+          player.position.addScaledVector(wishDir, moveSpeed * delta);
+        }
+
+        player.velocity.y -= gravity * delta;
+        player.position.y += player.velocity.y * delta;
+
+        const footX = Math.round(player.position.x / blockSize);
+        const footZ = Math.round(player.position.z / blockSize);
+        const highest = getHighestBlockY(footX, footZ);
+        const floorY = (highest + 1) * blockSize;
+        if (player.position.y < floorY) {
+          player.position.y = floorY;
+          player.velocity.y = 0;
+          canJump = true;
+        }
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      window.addEventListener("resize", onWindowResize);
+
+      function animate() {
+        const delta = Math.min(clock.getDelta(), 0.05);
+        updateMovement(delta);
+        updateCameraPosition();
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+
+      animate();
+    </script>
+  </body>
+</html>
