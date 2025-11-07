@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>MiniCraft 3D</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: linear-gradient(#7bd0ff, #e0f6ff);
+      font-family: 'Press Start 2P', monospace, sans-serif;
+      overflow: hidden;
+      color: #fff;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      text-align: center;
+      padding: 8px 14px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.35);
+      box-shadow: 0 0 16px rgba(0,0,0,0.5);
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+    #joystick {
+      position: absolute;
+      bottom: 30px;
+      left: 30px;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+    #joystick::after {
+      content: '';
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+    }
+    #jump {
+      position: absolute;
+      bottom: 50px;
+      right: 30px;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: none;
+      font-size: 14px;
+      background: rgba(76, 175, 80, 0.85);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="ui">
+    <div>MiniCraft 3D</div>
+    <div id="stats">Loading...</div>
+    <div style="font-size: 10px; opacity: 0.8; margin-top:4px;">Drag to look • Joystick to move • Jump to hop</div>
+  </div>
+  <div id="joystick"></div>
+  <button id="jump">JUMP</button>
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.158.0/examples/jsm/controls/OrbitControls.js';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 500);
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const skyColor = new THREE.Color('#87CEEB');
+    const duskColor = new THREE.Color('#f5a9c4');
+    const nightColor = new THREE.Color('#0b1d3a');
+
+    const hemiLight = new THREE.HemisphereLight('#ffffff', '#406064', 0.8);
+    scene.add(hemiLight);
+    const sunLight = new THREE.DirectionalLight('#ffffff', 0.9);
+    sunLight.position.set(50, 80, -30);
+    scene.add(sunLight);
+
+    const fog = new THREE.FogExp2('#8fc6ff', 0.014);
+    scene.fog = fog;
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.rotateSpeed = 0.4;
+    controls.maxPolarAngle = Math.PI * 0.49;
+
+    const worldSize = 64;
+    const worldDepth = 32;
+    const blockSize = 1;
+
+    camera.position.set(worldSize * 0.4, 22, worldSize * 0.8);
+    controls.target.set(worldSize * 0.5, 8, worldSize * 0.5);
+
+    // --- Noise helpers ---
+    function seededRandom(seed) {
+      let x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
+    }
+
+    function pseudoRandom(x, y) {
+      const seed = x * 374761393 + y * 668265263;
+      let t = (seed ^ (seed >> 13)) * 1274126177;
+      t = (t ^ (t >> 16)) >>> 0;
+      return (t % 10000) / 10000;
+    }
+
+    function smoothNoise(x, y) {
+      const corners = (pseudoRandom(x - 1, y - 1) + pseudoRandom(x + 1, y - 1) + pseudoRandom(x - 1, y + 1) + pseudoRandom(x + 1, y + 1)) / 16;
+      const sides = (pseudoRandom(x - 1, y) + pseudoRandom(x + 1, y) + pseudoRandom(x, y - 1) + pseudoRandom(x, y + 1)) / 8;
+      const center = pseudoRandom(x, y) / 4;
+      return corners + sides + center;
+    }
+
+    function interpolatedNoise(x, y) {
+      const intX = Math.floor(x);
+      const fracX = x - intX;
+      const intY = Math.floor(y);
+      const fracY = y - intY;
+
+      const v1 = smoothNoise(intX, intY);
+      const v2 = smoothNoise(intX + 1, intY);
+      const v3 = smoothNoise(intX, intY + 1);
+      const v4 = smoothNoise(intX + 1, intY + 1);
+
+      const i1 = THREE.MathUtils.lerp(v1, v2, fracX);
+      const i2 = THREE.MathUtils.lerp(v3, v4, fracX);
+      return THREE.MathUtils.lerp(i1, i2, fracY);
+    }
+
+    function perlin(x, y) {
+      let total = 0;
+      let frequency = 0.05;
+      let amplitude = 1;
+      let persistence = 0.55;
+      for (let i = 0; i < 6; i++) {
+        total += interpolatedNoise(x * frequency, y * frequency) * amplitude;
+        frequency *= 2;
+        amplitude *= persistence;
+      }
+      return total;
+    }
+
+    // --- Texture factory ---
+    function makeBlockTexture(colors) {
+      const size = 32;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const pixel = size / 8;
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const base = colors[(x + y) % colors.length];
+          ctx.fillStyle = base;
+          ctx.fillRect(x * pixel, y * pixel, pixel, pixel);
+        }
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestMipMapNearestFilter;
+      return tex;
+    }
+
+    const textures = {
+      grassTop: makeBlockTexture(['#7acb4c', '#6fb343']),
+      grassSide: makeBlockTexture(['#5d8c3b', '#4f7932']),
+      dirt: makeBlockTexture(['#8b5a32', '#7a4927']),
+      stone: makeBlockTexture(['#8d8d8d', '#7c7c7c']),
+      wood: makeBlockTexture(['#8a6134', '#6a4523']),
+      leaf: makeBlockTexture(['#3a8a2b', '#2f731f']),
+      water: makeBlockTexture(['rgba(32,105,178,0.8)', 'rgba(24,85,150,0.85)'])
+    };
+
+    function makeCubeMaterial(top, side, bottom) {
+      return [side, side, top, bottom, side, side].map(tex => new THREE.MeshLambertMaterial({ map: tex, transparent: tex === textures.water, opacity: tex === textures.water ? 0.75 : 1 }));
+    }
+
+    const grassMat = makeCubeMaterial(textures.grassTop, textures.grassSide, textures.dirt);
+    const dirtMat = makeCubeMaterial(textures.dirt, textures.dirt, textures.dirt);
+    const stoneMat = makeCubeMaterial(textures.stone, textures.stone, textures.stone);
+    const woodMat = makeCubeMaterial(textures.wood, textures.wood, textures.wood);
+    const leafMat = makeCubeMaterial(textures.leaf, textures.leaf, textures.leaf);
+    const waterMat = makeCubeMaterial(textures.water, textures.water, textures.water);
+
+    const blockGeometries = new Map();
+    function getBlockGeometry(size = blockSize) {
+      if (!blockGeometries.has(size)) {
+        blockGeometries.set(size, new THREE.BoxGeometry(size, size, size));
+      }
+      return blockGeometries.get(size);
+    }
+
+    const blocks = [];
+    const heightIndexMap = new Map();
+
+    function columnKey(x, z) {
+      return `${Math.round(x)}:${Math.round(z)}`;
+    }
+
+    function setHeightIndex(x, z, index) {
+      const key = columnKey(x, z);
+      const current = heightIndexMap.get(key);
+      if (current === undefined || index > current) {
+        heightIndexMap.set(key, index);
+      }
+    }
+
+    function getHeightIndex(x, z) {
+      return heightIndexMap.get(columnKey(x, z));
+    }
+
+    function getHeight(x, z) {
+      const index = getHeightIndex(x, z);
+      return index === undefined ? 0 : index * blockSize + blockSize * 0.5;
+    }
+
+    function addBlock(x, y, z, material) {
+      const mesh = new THREE.Mesh(getBlockGeometry(), material);
+      mesh.position.set(x * blockSize, y * blockSize, z * blockSize);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      blocks.push(mesh);
+      setHeightIndex(mesh.position.x, mesh.position.z, y);
+    }
+
+    // --- Terrain generation ---
+    const waterLevel = 6;
+    let highestPoint = 0;
+    for (let x = 0; x < worldSize; x++) {
+      for (let z = 0; z < worldSize; z++) {
+        const height = Math.floor(perlin(x, z) * worldDepth * 0.4) + 6;
+        highestPoint = Math.max(highestPoint, height);
+        for (let y = 0; y < height; y++) {
+          const mat = y === height - 1 ? grassMat : (y > height - 4 ? dirtMat : stoneMat);
+          addBlock(x, y, z, mat);
+        }
+        if (height < waterLevel) {
+          for (let y = height; y < waterLevel; y++) {
+            addBlock(x, y, z, waterMat);
+          }
+        }
+      }
+    }
+
+    // --- Tree generation ---
+    function placeTree(x, z, height) {
+      const groundIndex = getHeightIndex(x, z);
+      if (groundIndex === undefined) return;
+      const groundHeight = (groundIndex + 0.5) * blockSize;
+      if (groundHeight < (waterLevel - 0.5) * blockSize) return;
+      for (let i = 1; i <= height; i++) {
+        addBlock(x, groundIndex + i, z, woodMat);
+      }
+      const leafStart = groundIndex + height - 1;
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          for (let dy = 0; dy <= 3; dy++) {
+            if (Math.abs(dx) + Math.abs(dz) + dy > 4) continue;
+            addBlock(x + dx, leafStart + dy, z + dz, leafMat);
+          }
+        }
+      }
+    }
+
+    for (let x = 4; x < worldSize - 4; x++) {
+      for (let z = 4; z < worldSize - 4; z++) {
+        if (Math.random() < 0.02) {
+          placeTree(x, z, 5 + Math.floor(Math.random() * 3));
+        }
+      }
+    }
+
+    // --- Simple mobs ---
+    const mobs = [];
+    function spawnMob(x, y, z, color = '#ffde59') {
+      const geometry = getBlockGeometry(0.8);
+      const material = new THREE.MeshLambertMaterial({ color, flatShading: true });
+      const mob = new THREE.Mesh(geometry, material);
+      mob.position.set(x, y, z);
+      mob.userData = { angle: Math.random() * Math.PI * 2, speed: 0.03 + Math.random() * 0.05 };
+      scene.add(mob);
+      mobs.push(mob);
+      return mob;
+    }
+
+    for (let i = 0; i < 12; i++) {
+      const x = (Math.random() * (worldSize - 10) + 5) * blockSize;
+      const z = (Math.random() * (worldSize - 10) + 5) * blockSize;
+      const ground = getHeight(Math.floor(x), Math.floor(z)) + blockSize;
+      spawnMob(x, ground + 0.5, z, ['#ffde59','#f67280','#a4ebf3','#f9f7d9'][i % 4]);
+    }
+
+    // --- Player movement ---
+    const player = { position: new THREE.Vector3(worldSize * 0.5, highestPoint + 10, worldSize * 0.5), velocity: new THREE.Vector3() };
+    camera.position.copy(player.position.clone().add(new THREE.Vector3(12, 10, 12)));
+
+    const move = { forward: 0, strafe: 0 };
+    const keyState = {};
+
+    window.addEventListener('keydown', e => { keyState[e.code] = true; updateMovement(); });
+    window.addEventListener('keyup', e => { keyState[e.code] = false; updateMovement(); });
+
+    function updateMovement() {
+      move.forward = (keyState['KeyW'] || keyState['ArrowUp'] ? 1 : 0) - (keyState['KeyS'] || keyState['ArrowDown'] ? 1 : 0);
+      move.strafe = (keyState['KeyD'] || keyState['ArrowRight'] ? 1 : 0) - (keyState['KeyA'] || keyState['ArrowLeft'] ? 1 : 0);
+      if (keyState['Space']) jump();
+    }
+
+    function jump() {
+      if (player.position.y <= getHeight(Math.floor(player.position.x), Math.floor(player.position.z)) + 2) {
+        player.velocity.y = 0.2;
+      }
+    }
+
+    const jumpButton = document.getElementById('jump');
+    jumpButton.addEventListener('click', jump);
+
+    // Touch joystick
+    const joystick = document.getElementById('joystick');
+    const joyRect = () => joystick.getBoundingClientRect();
+    let touching = false;
+    let touchId = null;
+
+    function handleTouch(x, y) {
+      const rect = joyRect();
+      const dx = (x - (rect.left + rect.width / 2)) / (rect.width / 2);
+      const dy = (y - (rect.top + rect.height / 2)) / (rect.height / 2);
+      move.strafe = THREE.MathUtils.clamp(dx, -1, 1);
+      move.forward = -THREE.MathUtils.clamp(dy, -1, 1);
+    }
+
+    joystick.addEventListener('touchstart', e => {
+      touching = true;
+      touchId = e.changedTouches[0].identifier;
+      handleTouch(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      e.preventDefault();
+    });
+    joystick.addEventListener('touchmove', e => {
+      if (!touching) return;
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === touchId) {
+          handleTouch(touch.clientX, touch.clientY);
+          break;
+        }
+      }
+      e.preventDefault();
+    });
+    joystick.addEventListener('touchend', e => {
+      for (const touch of e.changedTouches) {
+        if (touch.identifier === touchId) {
+          touching = false;
+          touchId = null;
+          move.forward = 0;
+          move.strafe = 0;
+          break;
+        }
+      }
+      e.preventDefault();
+    });
+
+    // Mouse drag look
+    let isDragging = false;
+    let previous = new THREE.Vector2();
+    renderer.domElement.addEventListener('mousedown', e => {
+      isDragging = true;
+      previous.set(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', () => { isDragging = false; });
+    window.addEventListener('mousemove', e => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - previous.x;
+      const deltaY = e.clientY - previous.y;
+      previous.set(e.clientX, e.clientY);
+      controls.rotateLeft(deltaX * 0.002);
+      controls.rotateUp(deltaY * 0.002);
+    });
+
+    // Stats text
+    const statsEl = document.getElementById('stats');
+    const clock = new THREE.Clock();
+    let elapsed = 0;
+
+    function animate() {
+      const delta = clock.getDelta();
+      elapsed += delta;
+      controls.update();
+
+      const forwardVec = new THREE.Vector3();
+      camera.getWorldDirection(forwardVec);
+      forwardVec.y = 0;
+      forwardVec.normalize();
+      const rightVec = new THREE.Vector3().crossVectors(forwardVec, new THREE.Vector3(0,1,0)).normalize();
+
+      player.velocity.x += (forwardVec.x * move.forward + rightVec.x * move.strafe) * delta * 6;
+      player.velocity.z += (forwardVec.z * move.forward + rightVec.z * move.strafe) * delta * 6;
+      player.velocity.y -= delta * 0.5;
+
+      player.velocity.multiplyScalar(0.94);
+      player.position.add(player.velocity);
+
+      const ground = getHeight(Math.floor(player.position.x), Math.floor(player.position.z)) + blockSize * 1.1;
+      if (player.position.y < ground) {
+        player.position.y = ground;
+        player.velocity.y = 0;
+      }
+
+      controls.target.lerp(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), 0.08);
+      camera.position.lerp(player.position.clone().add(new THREE.Vector3(6, 8, 6)), 0.1);
+
+      mobs.forEach(mob => {
+        const data = mob.userData;
+        data.angle += (Math.random() - 0.5) * 0.05;
+        const moveSpeed = data.speed;
+        mob.position.x += Math.cos(data.angle) * moveSpeed;
+        mob.position.z += Math.sin(data.angle) * moveSpeed;
+        const mobGround = getHeight(Math.round(mob.position.x), Math.round(mob.position.z)) + blockSize;
+        mob.position.y = THREE.MathUtils.lerp(mob.position.y, mobGround + 0.4, 0.1);
+      });
+
+      const dayProgress = (Math.sin(elapsed * 0.05) + 1) / 2;
+      const sky = skyColor.clone().lerp(duskColor, Math.abs(dayProgress - 0.5) * 2).lerp(nightColor, Math.pow(1 - dayProgress, 3));
+      renderer.setClearColor(sky, 1);
+      hemiLight.intensity = 0.4 + dayProgress * 0.6;
+      sunLight.intensity = 0.3 + dayProgress * 0.7;
+      sunLight.position.set(Math.sin(elapsed * 0.05) * 80, 40 + Math.cos(elapsed * 0.05) * 60, Math.cos(elapsed * 0.05) * 80);
+
+      statsEl.textContent = `Blocks: ${blocks.length} | Mobs: ${mobs.length} | Daylight: ${(dayProgress * 100).toFixed(0)}%`;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
