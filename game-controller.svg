@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 260">
+  <defs>
+    <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3c3f4a" />
+      <stop offset="60%" stop-color="#1f2026" />
+      <stop offset="100%" stop-color="#14151a" />
+    </linearGradient>
+    <linearGradient id="handleHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.35)" />
+      <stop offset="40%" stop-color="rgba(255,255,255,0.08)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+    </linearGradient>
+    <radialGradient id="stickGradient" cx="50%" cy="45%" r="50%">
+      <stop offset="0%" stop-color="#35373f" />
+      <stop offset="70%" stop-color="#111216" />
+      <stop offset="100%" stop-color="#07070a" />
+    </radialGradient>
+    <radialGradient id="buttonGradient" cx="50%" cy="35%" r="55%">
+      <stop offset="0%" stop-color="#4f84ff" />
+      <stop offset="65%" stop-color="#2d4cff" />
+      <stop offset="100%" stop-color="#0b1c72" />
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="140%">
+      <feOffset dx="0" dy="8" result="offset" />
+      <feGaussianBlur in="offset" stdDeviation="12" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.35 0" />
+      <feBlend in="SourceGraphic" in2="blur" mode="normal" />
+    </filter>
+    <linearGradient id="seamGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2c2f36" />
+      <stop offset="100%" stop-color="#121318" />
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <path d="M58 104c-28 2-46 27-46 58 0 48 41 81 78 83 20 1 37-3 55-14 14-9 26-20 36-29 5-5 11-7 17-7h15c6 0 12 2 17 7 10 9 22 20 36 29 18 11 35 15 55 14 37-2 78-35 78-83 0-31-18-56-46-58-33-3-48-13-59-38-11-25-31-48-63-48h-51c-32 0-52 23-63 48-11 25-26 35-59 38z" fill="url(#bodyGradient)" stroke="#0a0b0f" stroke-width="4" stroke-linejoin="round" />
+    <path d="M104 180c-4 18-15 34-36 43-15 6-31 4-45-7-9-8-13-21-13-34 0-16 9-31 24-39 12-6 27-5 39 1 21 9 31 23 31 36z" fill="url(#handleHighlight)" opacity="0.45" />
+    <path d="M316 180c4 18 15 34 36 43 15 6 31 4 45-7 9-8 13-21 13-34 0-16-9-31-24-39-12-6-27-5-39 1-21 9-31 23-31 36z" fill="url(#handleHighlight)" opacity="0.45" />
+
+    <path d="M128 78c6-19 24-35 47-35h70c23 0 41 16 47 35" fill="none" stroke="#4f525d" stroke-width="5" stroke-linecap="round" stroke-dasharray="4 10" opacity="0.4" />
+
+    <path d="M136 130h148" stroke="url(#seamGradient)" stroke-width="5" stroke-linecap="round" opacity="0.5" />
+    <path d="M132 126h156" stroke="#111218" stroke-width="1.5" stroke-linecap="round" opacity="0.8" />
+
+    <g transform="translate(116 140)">
+      <circle cx="0" cy="0" r="34" fill="#15171f" stroke="#282b34" stroke-width="3" />
+      <circle cx="0" cy="0" r="24" fill="url(#stickGradient)" />
+      <circle cx="0" cy="0" r="14" fill="#0a0b0f" />
+      <path d="M-14 -2h28a2 2 0 0 1 0 4h-28a2 2 0 0 1 0-4z" fill="#1f222a" />
+      <path d="M-2 -14v28a2 2 0 0 1-4 0v-28a2 2 0 0 1 4 0z" fill="#1f222a" />
+    </g>
+
+    <g transform="translate(306 140)">
+      <circle cx="0" cy="0" r="34" fill="#15171f" stroke="#282b34" stroke-width="3" />
+      <circle cx="0" cy="0" r="24" fill="url(#stickGradient)" />
+      <circle cx="0" cy="0" r="14" fill="#0a0b0f" />
+      <circle cx="0" cy="0" r="9" fill="#1f2128" stroke="#42454f" stroke-width="1.8" />
+    </g>
+
+    <g transform="translate(92 132)">
+      <rect x="-48" y="-48" width="96" height="96" rx="18" fill="#16171f" stroke="#2c2f36" stroke-width="4" />
+      <path d="M-4 -30h8a6 6 0 0 1 6 6v12a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6z" fill="#272a33" />
+      <path d="M-4 18h8a6 6 0 0 1 6 6v12a6 6 0 0 1-6 6h-8a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6z" fill="#272a33" />
+      <path d="M-30 -4v8a6 6 0 0 1-6 6h-12a6 6 0 0 1-6-6v-8a6 6 0 0 1 6-6h12a6 6 0 0 1 6 6z" fill="#272a33" />
+      <path d="M18 -4v8a6 6 0 0 0 6 6h12a6 6 0 0 0 6-6v-8a6 6 0 0 0-6-6h-12a6 6 0 0 0-6 6z" fill="#272a33" />
+      <circle cx="0" cy="0" r="12" fill="#09090d" stroke="#2e3038" stroke-width="3" />
+    </g>
+
+    <g transform="translate(330 120)">
+      <g transform="rotate(-12)">
+        <circle cx="0" cy="0" r="18" fill="url(#buttonGradient)" />
+        <circle cx="52" cy="-10" r="18" fill="url(#buttonGradient)" transform="rotate(12)" />
+        <circle cx="42" cy="34" r="18" fill="url(#buttonGradient)" transform="rotate(22)" />
+        <circle cx="-10" cy="42" r="18" fill="url(#buttonGradient)" transform="rotate(32)" />
+      </g>
+      <circle cx="0" cy="0" r="9" fill="#090a10" />
+      <circle cx="50" cy="-8" r="9" fill="#090a10" />
+      <circle cx="40" cy="32" r="9" fill="#090a10" />
+      <circle cx="-8" cy="40" r="9" fill="#090a10" />
+    </g>
+
+    <g transform="translate(210 102)">
+      <rect x="-24" y="-8" width="48" height="10" rx="5" fill="#1d1f27" stroke="#353841" stroke-width="1.5" />
+      <rect x="-74" y="-6" width="32" height="8" rx="4" fill="#1d1f27" stroke="#3c4049" stroke-width="1" />
+      <rect x="42" y="-6" width="32" height="8" rx="4" fill="#1d1f27" stroke="#3c4049" stroke-width="1" />
+    </g>
+
+    <g transform="translate(208 178)">
+      <ellipse cx="-48" cy="34" rx="34" ry="22" fill="#101117" opacity="0.7" />
+      <ellipse cx="48" cy="34" rx="34" ry="22" fill="#101117" opacity="0.7" />
+      <ellipse cx="0" cy="40" rx="40" ry="24" fill="#101117" opacity="0.45" />
+    </g>
+
+    <g transform="translate(210 168)">
+      <circle cx="-48" cy="0" r="24" fill="#1a1c23" stroke="#3a3d47" stroke-width="4" />
+      <circle cx="48" cy="0" r="24" fill="#1a1c23" stroke="#3a3d47" stroke-width="4" />
+      <circle cx="-48" cy="0" r="12" fill="#09090d" />
+      <circle cx="48" cy="0" r="12" fill="#09090d" />
+      <path d="M-60 0h24" stroke="#0f1116" stroke-width="2" stroke-linecap="round" opacity="0.7" />
+      <path d="M36 0h24" stroke="#0f1116" stroke-width="2" stroke-linecap="round" opacity="0.7" />
+    </g>
+  </g>
+</svg>
