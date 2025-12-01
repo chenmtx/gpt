@@ -480,6 +480,8 @@
     });
 
     const step = (dt) => {
+      if (!player.pos) player.pos = new THREE.Vector3(0, 6, 10);
+      if (!player.vel) player.vel = new THREE.Vector3();
       const speed = 6;
       const friction = player.onGround ? 10 : 2;
       player.onGround = false;
