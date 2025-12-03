@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>球型 3D 全息元素周期表</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: radial-gradient(circle at 20% 20%, #0a0f24, #01030d 45%, #000);
+      --grid: rgba(255, 255, 255, 0.07);
+      --primary: #6cf0ff;
+      --accent: #c77dff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Inter", "SF Pro Display", "Helvetica Neue", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      overflow: hidden;
+      color: #dce7ff;
+    }
+
+    #app {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: linear-gradient(var(--grid), transparent 1px),
+        linear-gradient(90deg, var(--grid), transparent 1px);
+      background-size: 80px 80px;
+      opacity: 0.15;
+      mix-blend-mode: screen;
+    }
+
+    .title {
+      position: absolute;
+      top: 24px;
+      left: 24px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: 18px;
+      background: linear-gradient(120deg, var(--primary), var(--accent));
+      -webkit-background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 8px rgba(108, 240, 255, 0.45));
+      pointer-events: none;
+    }
+
+    .legend {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      padding: 14px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      backdrop-filter: blur(12px);
+      background: rgba(5, 10, 25, 0.55);
+      box-shadow: 0 15px 50px rgba(0, 0, 0, 0.45), inset 0 0 20px rgba(108, 240, 255, 0.08);
+      pointer-events: none;
+    }
+
+    .legend h2 {
+      margin: 0 0 6px;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #cddcff;
+    }
+
+    .legend p {
+      margin: 0;
+      font-size: 12px;
+      color: #9ab3ff;
+      line-height: 1.5;
+    }
+
+    .tooltip {
+      position: absolute;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(3, 8, 20, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.45);
+      transform: translate(-50%, -120%);
+      pointer-events: none;
+      display: none;
+      min-width: 160px;
+    }
+
+    .tooltip h3 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      color: #f2fbff;
+      letter-spacing: 0.02em;
+    }
+
+    .tooltip .meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #9fd6ff;
+      margin-bottom: 6px;
+    }
+
+    .tooltip .desc {
+      font-size: 12px;
+      color: #b6c8ff;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud"></div>
+  <div class="title">HOLOGRAPHIC PERIODIC SPHERE</div>
+  <div class="legend">
+    <h2>交互说明</h2>
+    <p>拖拽旋转，滚轮缩放，点击元素查看详情。色彩亮度代表族能级，环形波纹暗示电子层。</p>
+  </div>
+  <div class="tooltip" id="tooltip">
+    <h3>Element</h3>
+    <div class="meta">
+      <span id="meta-number">Z</span>
+      <span id="meta-symbol">Xx</span>
+    </div>
+    <div class="desc" id="meta-name">Name</div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.161.0/build/three.module.js";
+    import { OrbitControls } from "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+
+    const elements = [
+      { number: 1, symbol: "H", name: "Hydrogen" },
+      { number: 2, symbol: "He", name: "Helium" },
+      { number: 3, symbol: "Li", name: "Lithium" },
+      { number: 4, symbol: "Be", name: "Beryllium" },
+      { number: 5, symbol: "B", name: "Boron" },
+      { number: 6, symbol: "C", name: "Carbon" },
+      { number: 7, symbol: "N", name: "Nitrogen" },
+      { number: 8, symbol: "O", name: "Oxygen" },
+      { number: 9, symbol: "F", name: "Fluorine" },
+      { number: 10, symbol: "Ne", name: "Neon" },
+      { number: 11, symbol: "Na", name: "Sodium" },
+      { number: 12, symbol: "Mg", name: "Magnesium" },
+      { number: 13, symbol: "Al", name: "Aluminium" },
+      { number: 14, symbol: "Si", name: "Silicon" },
+      { number: 15, symbol: "P", name: "Phosphorus" },
+      { number: 16, symbol: "S", name: "Sulfur" },
+      { number: 17, symbol: "Cl", name: "Chlorine" },
+      { number: 18, symbol: "Ar", name: "Argon" },
+      { number: 19, symbol: "K", name: "Potassium" },
+      { number: 20, symbol: "Ca", name: "Calcium" },
+      { number: 21, symbol: "Sc", name: "Scandium" },
+      { number: 22, symbol: "Ti", name: "Titanium" },
+      { number: 23, symbol: "V", name: "Vanadium" },
+      { number: 24, symbol: "Cr", name: "Chromium" },
+      { number: 25, symbol: "Mn", name: "Manganese" },
+      { number: 26, symbol: "Fe", name: "Iron" },
+      { number: 27, symbol: "Co", name: "Cobalt" },
+      { number: 28, symbol: "Ni", name: "Nickel" },
+      { number: 29, symbol: "Cu", name: "Copper" },
+      { number: 30, symbol: "Zn", name: "Zinc" },
+      { number: 31, symbol: "Ga", name: "Gallium" },
+      { number: 32, symbol: "Ge", name: "Germanium" },
+      { number: 33, symbol: "As", name: "Arsenic" },
+      { number: 34, symbol: "Se", name: "Selenium" },
+      { number: 35, symbol: "Br", name: "Bromine" },
+      { number: 36, symbol: "Kr", name: "Krypton" },
+      { number: 37, symbol: "Rb", name: "Rubidium" },
+      { number: 38, symbol: "Sr", name: "Strontium" },
+      { number: 39, symbol: "Y", name: "Yttrium" },
+      { number: 40, symbol: "Zr", name: "Zirconium" },
+      { number: 41, symbol: "Nb", name: "Niobium" },
+      { number: 42, symbol: "Mo", name: "Molybdenum" },
+      { number: 43, symbol: "Tc", name: "Technetium" },
+      { number: 44, symbol: "Ru", name: "Ruthenium" },
+      { number: 45, symbol: "Rh", name: "Rhodium" },
+      { number: 46, symbol: "Pd", name: "Palladium" },
+      { number: 47, symbol: "Ag", name: "Silver" },
+      { number: 48, symbol: "Cd", name: "Cadmium" },
+      { number: 49, symbol: "In", name: "Indium" },
+      { number: 50, symbol: "Sn", name: "Tin" },
+      { number: 51, symbol: "Sb", name: "Antimony" },
+      { number: 52, symbol: "Te", name: "Tellurium" },
+      { number: 53, symbol: "I", name: "Iodine" },
+      { number: 54, symbol: "Xe", name: "Xenon" },
+      { number: 55, symbol: "Cs", name: "Caesium" },
+      { number: 56, symbol: "Ba", name: "Barium" },
+      { number: 57, symbol: "La", name: "Lanthanum" },
+      { number: 58, symbol: "Ce", name: "Cerium" },
+      { number: 59, symbol: "Pr", name: "Praseodymium" },
+      { number: 60, symbol: "Nd", name: "Neodymium" },
+      { number: 61, symbol: "Pm", name: "Promethium" },
+      { number: 62, symbol: "Sm", name: "Samarium" },
+      { number: 63, symbol: "Eu", name: "Europium" },
+      { number: 64, symbol: "Gd", name: "Gadolinium" },
+      { number: 65, symbol: "Tb", name: "Terbium" },
+      { number: 66, symbol: "Dy", name: "Dysprosium" },
+      { number: 67, symbol: "Ho", name: "Holmium" },
+      { number: 68, symbol: "Er", name: "Erbium" },
+      { number: 69, symbol: "Tm", name: "Thulium" },
+      { number: 70, symbol: "Yb", name: "Ytterbium" },
+      { number: 71, symbol: "Lu", name: "Lutetium" },
+      { number: 72, symbol: "Hf", name: "Hafnium" },
+      { number: 73, symbol: "Ta", name: "Tantalum" },
+      { number: 74, symbol: "W", name: "Tungsten" },
+      { number: 75, symbol: "Re", name: "Rhenium" },
+      { number: 76, symbol: "Os", name: "Osmium" },
+      { number: 77, symbol: "Ir", name: "Iridium" },
+      { number: 78, symbol: "Pt", name: "Platinum" },
+      { number: 79, symbol: "Au", name: "Gold" },
+      { number: 80, symbol: "Hg", name: "Mercury" },
+      { number: 81, symbol: "Tl", name: "Thallium" },
+      { number: 82, symbol: "Pb", name: "Lead" },
+      { number: 83, symbol: "Bi", name: "Bismuth" },
+      { number: 84, symbol: "Po", name: "Polonium" },
+      { number: 85, symbol: "At", name: "Astatine" },
+      { number: 86, symbol: "Rn", name: "Radon" },
+      { number: 87, symbol: "Fr", name: "Francium" },
+      { number: 88, symbol: "Ra", name: "Radium" },
+      { number: 89, symbol: "Ac", name: "Actinium" },
+      { number: 90, symbol: "Th", name: "Thorium" },
+      { number: 91, symbol: "Pa", name: "Protactinium" },
+      { number: 92, symbol: "U", name: "Uranium" },
+      { number: 93, symbol: "Np", name: "Neptunium" },
+      { number: 94, symbol: "Pu", name: "Plutonium" },
+      { number: 95, symbol: "Am", name: "Americium" },
+      { number: 96, symbol: "Cm", name: "Curium" },
+      { number: 97, symbol: "Bk", name: "Berkelium" },
+      { number: 98, symbol: "Cf", name: "Californium" },
+      { number: 99, symbol: "Es", name: "Einsteinium" },
+      { number: 100, symbol: "Fm", name: "Fermium" },
+      { number: 101, symbol: "Md", name: "Mendelevium" },
+      { number: 102, symbol: "No", name: "Nobelium" },
+      { number: 103, symbol: "Lr", name: "Lawrencium" },
+      { number: 104, symbol: "Rf", name: "Rutherfordium" },
+      { number: 105, symbol: "Db", name: "Dubnium" },
+      { number: 106, symbol: "Sg", name: "Seaborgium" },
+      { number: 107, symbol: "Bh", name: "Bohrium" },
+      { number: 108, symbol: "Hs", name: "Hassium" },
+      { number: 109, symbol: "Mt", name: "Meitnerium" },
+      { number: 110, symbol: "Ds", name: "Darmstadtium" },
+      { number: 111, symbol: "Rg", name: "Roentgenium" },
+      { number: 112, symbol: "Cn", name: "Copernicium" },
+      { number: 113, symbol: "Nh", name: "Nihonium" },
+      { number: 114, symbol: "Fl", name: "Flerovium" },
+      { number: 115, symbol: "Mc", name: "Moscovium" },
+      { number: 116, symbol: "Lv", name: "Livermorium" },
+      { number: 117, symbol: "Ts", name: "Tennessine" },
+      { number: 118, symbol: "Og", name: "Oganesson" },
+    ];
+
+    const app = document.getElementById("app");
+    const tooltip = document.getElementById("tooltip");
+    const metaNumber = document.getElementById("meta-number");
+    const metaSymbol = document.getElementById("meta-symbol");
+    const metaName = document.getElementById("meta-name");
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    app.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x020712, 0.012);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 48);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.rotateSpeed = 0.5;
+    controls.minDistance = 20;
+    controls.maxDistance = 140;
+
+    const ambient = new THREE.AmbientLight(0x84b7ff, 0.6);
+    scene.add(ambient);
+
+    const spot = new THREE.PointLight(0x8df0ff, 1.5, 180, 2);
+    spot.position.set(40, 30, 40);
+    scene.add(spot);
+
+    const rimLight = new THREE.PointLight(0xc77dff, 1.1, 150, 3.5);
+    rimLight.position.set(-32, -30, -24);
+    scene.add(rimLight);
+
+    const baseSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(18.5, 64, 64),
+      new THREE.MeshPhysicalMaterial({
+        color: 0x082040,
+        metalness: 0.85,
+        roughness: 0.35,
+        transmission: 0.45,
+        thickness: 1.5,
+        clearcoat: 0.4,
+        emissive: new THREE.Color(0x0d2d55),
+        emissiveIntensity: 0.65,
+      })
+    );
+    scene.add(baseSphere);
+
+    const wire = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.SphereGeometry(18.5, 24, 24)),
+      new THREE.LineBasicMaterial({ color: 0x4be3ff, transparent: true, opacity: 0.25 })
+    );
+    scene.add(wire);
+
+    const rings = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const radius = 10 + i * 2.5;
+      const torus = new THREE.Mesh(
+        new THREE.TorusGeometry(radius, 0.03, 16, 200),
+        new THREE.MeshBasicMaterial({ color: 0x6cf0ff, transparent: true, opacity: 0.22 })
+      );
+      torus.rotation.x = Math.random() * Math.PI;
+      torus.rotation.y = Math.random() * Math.PI;
+      rings.add(torus);
+    }
+    scene.add(rings);
+
+    const particleGeometry = new THREE.BufferGeometry();
+    const particleCount = 1200;
+    const positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      const r = THREE.MathUtils.randFloat(18, 45);
+      const theta = Math.acos(THREE.MathUtils.randFloatSpread(2));
+      const phi = THREE.MathUtils.randFloat(0, Math.PI * 2);
+      positions[i * 3] = r * Math.sin(theta) * Math.cos(phi);
+      positions[i * 3 + 1] = r * Math.sin(theta) * Math.sin(phi);
+      positions[i * 3 + 2] = r * Math.cos(theta);
+    }
+    particleGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const particles = new THREE.Points(
+      particleGeometry,
+      new THREE.PointsMaterial({ size: 0.12, color: 0x7fd0ff, transparent: true, opacity: 0.6 })
+    );
+    scene.add(particles);
+
+    const elementGroup = new THREE.Group();
+    scene.add(elementGroup);
+
+    const createLabelTexture = (symbol, number) => {
+      const size = 96;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, "rgba(108, 240, 255, 0.95)");
+      gradient.addColorStop(1, "rgba(199, 125, 255, 0.95)");
+      ctx.fillStyle = "rgba(0, 10, 25, 0.55)";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = gradient;
+      ctx.shadowColor = "rgba(108, 240, 255, 0.4)";
+      ctx.shadowBlur = 18;
+      ctx.font = "bold 40px Inter";
+      ctx.textAlign = "center";
+      ctx.fillText(symbol, size / 2, size / 2 + 12);
+      ctx.font = "14px Inter";
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(200, 220, 255, 0.85)";
+      ctx.fillText(number, size / 2, size - 18);
+      return new THREE.CanvasTexture(canvas);
+    };
+
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const radius = 18.5;
+
+    const sprites = elements.map((el, i) => {
+      const y = 1 - (i / (elements.length - 1)) * 2;
+      const r = Math.sqrt(1 - y * y);
+      const theta = goldenAngle * i;
+      const x = Math.cos(theta) * r;
+      const z = Math.sin(theta) * r;
+      const pos = new THREE.Vector3(x, y, z).multiplyScalar(radius);
+
+      const texture = createLabelTexture(el.symbol, el.number);
+      const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.position.copy(pos);
+      sprite.scale.set(2.8, 2.8, 2.8);
+      sprite.userData = el;
+      elementGroup.add(sprite);
+      return sprite;
+    });
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let hovered = null;
+
+    function updateTooltip(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+      const intersects = raycaster.intersectObjects(sprites);
+      if (intersects.length > 0) {
+        const target = intersects[0].object;
+        if (hovered !== target) {
+          hovered = target;
+          const { number, symbol, name } = target.userData;
+          metaNumber.textContent = `Z = ${number}`;
+          metaSymbol.textContent = symbol;
+          metaName.textContent = name;
+          tooltip.style.display = "block";
+        }
+        const projected = target.position.clone().project(camera);
+        const x = (projected.x * 0.5 + 0.5) * rect.width + rect.left;
+        const y = (-projected.y * 0.5 + 0.5) * rect.height + rect.top;
+        tooltip.style.transform = `translate(${x}px, ${y}px) translate(-50%, -120%)`;
+      } else {
+        hovered = null;
+        tooltip.style.display = "none";
+      }
+    }
+
+    window.addEventListener("pointermove", updateTooltip);
+    window.addEventListener("click", updateTooltip);
+
+    function resize() {
+      const { innerWidth: w, innerHeight: h } = window;
+      renderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener("resize", resize);
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      const t = clock.getElapsedTime();
+      requestAnimationFrame(animate);
+      elementGroup.rotation.y += 0.0008;
+      baseSphere.rotation.y -= 0.0004;
+      rings.children.forEach((ring, idx) => {
+        ring.rotation.x += 0.0006 + idx * 0.0002;
+        ring.rotation.y += 0.0005 + idx * 0.0001;
+      });
+      particles.rotation.y += 0.0005;
+      const pulse = 0.25 + Math.sin(t * 1.6) * 0.08;
+      baseSphere.material.emissiveIntensity = 0.55 + pulse * 0.35;
+      sprites.forEach((s, i) => {
+        const glow = 0.7 + Math.sin(t * 2 + i * 0.3) * 0.15;
+        s.material.opacity = glow;
+      });
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    resize();
+    animate();
+  </script>
+</body>
+</html>
